@@ -334,9 +334,84 @@ For features with multiple entities (hotels + vendors + mappings), create one st
 
 ## Step 8 — Generate components
 
+### 8.0 — When source is an admin system: use admin class names directly, NOT shadcn primitives
+
+**This is where v0.10 prototypes most often fail visual fidelity.** The export ships `styles.compiled.css` with 8000+ exact admin selectors (`.btn`, `.btn-primary`, `.input`, `.k-grid`, `.page-sidebar`, `.tabs-nav`, `.modal-titlebar`, `.pagination`). Use them DIRECTLY in JSX:
+
+```tsx
+// ✅ Admin classes from compiled CSS — visual matches source 1:1
+<button className="btn btn-primary">Save</button>
+<button className="btn btn-secondary"><i className="fas fa-search"/> Search</button>
+<div className="input"><input type="text" placeholder="..." /></div>
+<div className="k-grid">
+  <table>
+    <thead><tr><th>Hotel Code</th>...</tr></thead>
+    <tbody>{rows.map(r => <tr key={r.id}>...</tr>)}</tbody>
+  </table>
+</div>
+<aside className="page-sidebar">...</aside>
+<nav className="tabs-nav">{tabs.map(t => <button className={t.active ? 'active' : ''}>{t.label}</button>)}</nav>
+
+// ❌ DO NOT wrap in shadcn primitives — they bring their own bg / padding / font-size that override admin values
+<Button variant="primary">Save</Button>           // wrong: shadcn h-10 wins
+<Input className="..." />                          // wrong: shadcn input bg + padding wins
+<Card><CardContent>...</CardContent></Card>        // wrong: shadcn card shadow + radius wins
+```
+
+**Rule of thumb:**
+- Source uses Tailwind / Material / Chakra → use shadcn primitives (cascade plays nice)
+- Source uses Bootstrap / custom admin SCSS / Kendo → **use the source's class names directly** from `styles.compiled.css`
+
+For shadcn Dialog / Toast (where source has no React equivalent), use only the BARE OVERLAY SHELL:
+- `<Dialog open onOpenChange>` for state-driven open/close + backdrop + ESC handling
+- Inside `<DialogContent>`, render admin markup:
+  ```tsx
+  <DialogContent className="p-0 max-w-3xl">
+    <div className="modal-titlebar"><h3>Hotel Master — {code}</h3></div>
+    <div className="modal-content">
+      <form>
+        <div className="input"><label>Hotel Code *</label><input ... /></div>
+        ...
+      </form>
+    </div>
+    <div className="modal-footer">
+      <button className="btn btn-secondary" type="button" onClick={...}>Close</button>
+      <button className="btn btn-primary" type="submit">Save</button>
+    </div>
+  </DialogContent>
+  ```
+  This way the shadcn shell handles focus trap / ESC / tab cycle while every visible pixel comes from `styles.compiled.css`.
+
+For zod + react-hook-form: keep the validation logic + state management; just render plain `<input className="...">` instead of `<FormField>`/`<FormControl>`. The error rendering can be a small `<div className="error-text">`.
+
+### 8.0b — Font + body bg must match source, NOT Vite defaults
+
+Vite's default scaffold ships `Inter` + `#fff` body. If `tokens.json` `typography.fontSans` references `Pretendard` (oh-admin) or any non-Inter font, the prototype MUST honor it:
+
+```css
+@theme {
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-content-bg, #faf8fb);  /* NOT #f4f5f7 or #fff — admin systems use a tinted off-white */
+}
+```
+
+oh-admin's `$--common-contents-bg = #faf8fb` lives in the compiled CSS. When `styles.compiled.css` sets `body { background: ... }`, that wins automatically — but the inline `index.css` `@layer base` block must NOT override it with a hardcoded `#fff` or `#f4f5f7`.
+
+For the Pretendard font to actually load, prepend the CDN in `src/index.css`:
+
+```css
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+```
+
 ### 8a. Admin shell (`src/components/AdminShell.tsx`)
 
 Wraps every page in the standard sidebar + topbar + tab bar layout described in the previous static prototype-builder. Use shadcn `Sheet` for collapsible mobile sidebar; on desktop just render the full sidebar inline.
+
+**Use admin class names verbatim** — `.page-sidebar`, `.page-logo`, `.page-header`, `.tab-bar`, `.nav-menu`, etc. — these are all in `styles.compiled.css`.
 
 Brand logo: `<img src="/header-logo-white.png" />` — copy `{themeDir}/assets/images/common/<brand-logo-filename>` to `public/` so Vite serves it.
 
