@@ -50,7 +50,7 @@ function classify(absPath) {
 
   // Global style partials in src/assets/scss/, src/scss/, src/styles/
   // These are critical for prototypes to inherit real layout/component styles
-  // (e.g., oh-admin _layout.scss has .page-sidebar / .page-wrap / .page-logo;
+  // (e.g., enterprise admin _layout.scss has .page-sidebar / .page-wrap / .page-logo;
   // _buttons.scss has .btn / .btn-primary / .btn-xs/md/lg etc.)
   if (/[\\/]assets[\\/]scss[\\/]/.test(rel) && /\.scss$/.test(base)) return 'global-scss';
   if (/[\\/](scss|styles)[\\/]/.test(rel) && /\.scss$/.test(base) && !/[\\/]node_modules[\\/]/.test(rel)) return 'global-scss';

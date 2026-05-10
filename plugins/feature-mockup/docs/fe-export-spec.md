@@ -29,7 +29,7 @@ At minimum, ship `manifest.json` plus **either** `tokens.json` **or** `tailwind.
 
 ```json
 {
-  "name": "ohmyhotel-design-system",
+  "name": "<your-design-system-name>",
   "version": "2.4.0",
   "exportedAt": "2026-05-10",
   "stack": {

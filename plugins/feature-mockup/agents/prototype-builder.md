@@ -151,17 +151,17 @@ When you write the inline `<script>` block, these mistakes crash the modal at fi
    container.querySelectorAll('.tab-pane').forEach(p => p.hidden = p.dataset.pane !== key);
    ```
 
-2. **Element lookups inside dialog open functions.** When `openCreateDialog()` calls `document.getElementById('hotel-master-form')` BEFORE the modal is set to `hidden=false`, the form is in the DOM but pickers may not have their initial values populated yet. Wrap the body of every dialog-open function in:
+2. **Element lookups inside dialog open functions.** When `openCreateDialog()` calls `document.getElementById('<entity>-master-form')` BEFORE the modal is set to `hidden=false`, the form is in the DOM but pickers may not have their initial values populated yet. Wrap the body of every dialog-open function in:
    ```js
-   const form = document.getElementById('hotel-master-form');
-   if (!form) { console.warn('hotel-master-form not in DOM'); return; }
+   const form = document.getElementById('<entity>-master-form');
+   if (!form) { console.warn('<entity>-master-form not in DOM'); return; }
    form.reset();
    // ... rest of setup
-   document.getElementById('modal-hotel-master').hidden = false;
+   document.getElementById('modal-<entity>-master').hidden = false;
    ```
    Always check `if (!el) return;` before `.querySelectorAll` / `.classList` / `.value` on elements that might not exist.
 
-3. **Form ID consistency.** The form's `id` MUST match what `openCreateDialog`/`openEditDialog`/`submitHotelForm` expects. Pick ONE id (e.g. `hotel-master-form`) and use it everywhere — both in the HTML attribute and every `getElementById` call. A typo here causes silent crashes.
+3. **Form ID consistency.** The form's `id` MUST match what `openCreateDialog`/`openEditDialog`/`submit<Entity>Form` expects. Pick ONE id (e.g. `<entity>-master-form` where `<entity>` is the kebab-case entity name) and use it everywhere — both in the HTML attribute and every `getElementById` call. A typo here causes silent crashes.
 
 4. **`onclick` attribute strings.** When you wire a button via `<button onclick="openModal('modal-x')">`, the function MUST be a top-level function or attached to `window`. If it lives in an IIFE without `window.__proto.openModal`, the inline handler can't see it. Either expose via `window.__proto = { openCreateDialog, openEditDialog, ... }` AND wire as `<button onclick="window.__proto.openCreateDialog()">`, or skip the IIFE wrap and let functions be globals.
 
@@ -175,12 +175,12 @@ The static HTML+CSS prototype isn't read-only. It runs a **vanilla JS interactiv
 
 ```json
 {
-  "hotels": [
-    { "id": "HT001", "name": "Lotte Hotel Hanoi", "country": "VN", ... },
-    { "id": "HT002", "name": "Park Hyatt Tokyo", "country": "JP", ... }
+  "<entity-1>": [
+    { "id": "<id-1>", "<field-a>": "...", "<field-b>": "..." },
+    { "id": "<id-2>", "<field-a>": "...", "<field-b>": "..." }
   ],
-  "regions": [...],
-  "vendors": [...]
+  "<entity-2>": [...],
+  "<entity-3>": [...]
 }
 ```
 
@@ -189,10 +189,10 @@ When `mock-data.json` is missing or thin, supplement with 5-15 realistic invente
 **Read `events.json`** (when present). Per-route map of source event handlers + the actions each handler performs:
 
 ```json
-"ho-hotel-contents": {
+"<feature-route-name>": {
   "handlers": {
-    "onClickAdd": { "actions": [{"kind":"dialog-open","target":"hotel-master"}, {"kind":"event-emit"}], "framework": "angular" },
-    "onSaveHotel": { "actions": [{"kind":"http-post","target":"/api/hotels"}, {"kind":"toast","message":"Saved"}, {"kind":"dialog-close"}], "framework": "angular" }
+    "onClickAdd":  { "actions": [{"kind":"dialog-open","target":"<modal-id>"}, {"kind":"event-emit"}], "framework": "angular" },
+    "onSaveItem":  { "actions": [{"kind":"http-post","target":"/api/<resource>"}, {"kind":"toast","message":"Saved"}, {"kind":"dialog-close"}], "framework": "angular" }
   },
   "triggers": {
     "onClickAdd": [{"event":"click","sourceFile":"...component.html"}]
@@ -203,16 +203,16 @@ When `mock-data.json` is missing or thin, supplement with 5-15 realistic invente
 When you wire a button in the prototype, look up its handler in `events.json` and reproduce the action chain. Example:
 
 ```js
-// events.json says onSaveHotel does: http-post + toast "Saved" + dialog-close
-function onSaveHotel(e) {
+// events.json says onSave<Entity> does: http-post + toast "Saved" + dialog-close
+function onSave<Entity>(e) {
   e.preventDefault();
   const data = validateForm(e.target);
   if (!data) return;
   // simulate http-post via store mutation
-  if (mode === 'create') createHotel(data);
-  else updateHotel(currentId, data);
+  if (mode === 'create') create<Entity>(data);
+  else update<Entity>(currentId, data);
   showToast('Saved', 'success');                  // matches events.json action
-  closeModal('modal-hotel-master');                // matches dialog-close
+  closeModal('modal-<entity>-master');             // matches dialog-close
 }
 ```
 
@@ -221,34 +221,36 @@ This way the prototype's UX flow MATCHES what the dev wrote in source, not the a
 **Read `business-rules.json`** (when present). Conditional alerts + error messages + constants:
 
 ```json
-"ho-hotel-contents": {
+"<feature-route-name>": {
   "rules": [
-    { "kind": "conditional-alert", "condition": "!result", "message": "Period accept max 3 months", "sourceFile": "..." },
-    { "kind": "conditional-alert", "condition": "hotelCodes.length > 1", "message": "Please select one item.", "sourceFile": "..." }
+    { "kind": "conditional-alert", "condition": "<expression>", "message": "<source's actual error copy>", "sourceFile": "..." },
+    { "kind": "conditional-alert", "condition": "selected.length > 1", "message": "Please select one item.", "sourceFile": "..." }
   ],
-  "constants": [{ "name": "MAX_AREA_CHIPS", "value": "20", "sourceFile": "..." }],
-  "errorMessages": [{ "code": "ERR-REG-003", "message": null, "sourceFile": "..." }]
+  "constants": [{ "name": "MAX_<LIMIT>", "value": "20", "sourceFile": "..." }],
+  "errorMessages": [{ "code": "ERR-<DOMAIN>-<NN>", "message": null, "sourceFile": "..." }]
 }
 ```
 
 Embed these into the prototype as inline `BUSINESS_RULES` constant. When validating or submitting, check the conditions and show the source's actual error message — NOT a generic "Invalid input". Example:
 
 ```js
+// EXAMPLE shape — replace keys + values with what business-rules.json
+// extracted for THIS feature (constants from MAX_/MIN_/DEFAULT_ + the
+// real conditional-alert messages, not invented copy)
 const BUSINESS_RULES = {
-  // From business-rules.json
-  maxDateRangeMonths: 3,
-  maxAreaChips: 20,
+  '<rule-key-1>': '<value-from-source-constant>',
+  '<rule-key-2>': '<value-from-source-constant>',
   errorMessages: {
-    'period-too-long': 'Period accept max 3 months',
-    'multi-selection': 'Please select one item.',
-    'no-selection': 'There are no items selected.',
+    '<rule-key-1>': '<source actual error string>',
+    '<rule-key-2>': '<source actual error string>',
   },
 };
 
-function validateDateRange(from, to) {
-  const diffMonths = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24 * 30);
-  if (diffMonths > BUSINESS_RULES.maxDateRangeMonths) {
-    showToast(BUSINESS_RULES.errorMessages['period-too-long'], 'error');
+// EXAMPLE check — substitute the real condition + message keys this
+// feature surfaces in business-rules.json
+function validate<RuleName>(args) {
+  if (/* condition extracted from source */) {
+    showToast(BUSINESS_RULES.errorMessages['<rule-key>'], 'error');
     return false;
   }
   return true;
@@ -260,7 +262,7 @@ function validateDateRange(from, to) {
 ```json
 {
   "Hotel": {
-    "hotelCode": [{"type": "required"}, {"type": "pattern", "value": "^HT[0-9]{3,}$"}],
+    "<idField>": [{"type": "required"}, {"type": "pattern", "value": "^<PREFIX>[0-9]{3,}$"}],
     "email": [{"type": "email"}],
     "areas": [{"type": "maxLength", "value": 20}]
   }
@@ -273,13 +275,16 @@ Translate to native HTML5 attributes (`required`, `pattern=`, `type="email"`, `m
 
 Inline this script block at the END of every prototype HTML (after the body content but before closing `</body>`):
 
+> Pseudocode below uses `<Entity>` / `<entity>` as placeholders for the primary entity of the feature you're prototyping (e.g. `Hotel`/`hotel`, `Booking`/`booking`, `User`/`user`, `Order`/`order`). When you generate the actual script, substitute throughout — keep the names consistent across STATE_KEY, SEED_DATA key, function names, and grid renderer.
+
 ```html
 <script>
   // ─── State store with localStorage persist ─────────────────────────
-  const STATE_KEY = 'feature-mockup-{feature-name}-v1';
+  const STATE_KEY = 'feature-mockup-<feature-name>-v1';
 
-  // Seed from mock-data.json (inlined here at build time)
-  const SEED_DATA = { hotels: [/* records */], regions: [/* ... */] };
+  // Seed from mock-data.json (inlined here at build time).
+  // Top-level keys = entity-name plural ('hotels', 'bookings', 'users', ...).
+  const SEED_DATA = { '<entities>': [/* records */], '<related-entities>': [/* ... */] };
 
   function loadState() {
     try {
@@ -296,29 +301,29 @@ Inline this script block at the END of every prototype HTML (after the body cont
   let state = loadState();
 
   // ─── CRUD operations ────────────────────────────────────────────────
-  function createHotel(data) {
-    const id = 'HT' + String(Date.now()).slice(-6);
+  function create<Entity>(data) {
+    const id = '<ID-PREFIX>' + String(Date.now()).slice(-6);
     const record = { id, ...data, createdAt: new Date().toISOString() };
-    state.hotels.unshift(record);
+    state.<entities>.unshift(record);
     saveState(state);
     renderGrid();
-    showToast('Created ' + record.name, 'success');
+    showToast('Created ' + (record.name || record.id), 'success');
     return id;
   }
 
-  function updateHotel(id, patch) {
-    const idx = state.hotels.findIndex(h => h.id === id);
+  function update<Entity>(id, patch) {
+    const idx = state.<entities>.findIndex(x => x.id === id);
     if (idx < 0) return false;
-    state.hotels[idx] = { ...state.hotels[idx], ...patch, updatedAt: new Date().toISOString() };
+    state.<entities>[idx] = { ...state.<entities>[idx], ...patch, updatedAt: new Date().toISOString() };
     saveState(state);
     renderGrid();
-    showToast('Updated ' + state.hotels[idx].name, 'success');
+    showToast('Updated ' + (state.<entities>[idx].name || id), 'success');
     return true;
   }
 
-  function deleteHotel(id) {
-    if (!confirm('Delete this hotel? This cannot be undone.')) return false;
-    state.hotels = state.hotels.filter(h => h.id !== id);
+  function delete<Entity>(id) {
+    if (!confirm('Delete this <entity>? This cannot be undone.')) return false;
+    state.<entities> = state.<entities>.filter(x => x.id !== id);
     saveState(state);
     renderGrid();
     showToast('Deleted', 'success');
@@ -336,15 +341,17 @@ Inline this script block at the END of every prototype HTML (after the body cont
   function renderGrid() {
     const tbody = document.getElementById('grid-body');
     if (!tbody) return;
-    tbody.innerHTML = state.hotels.map(h => `
-      <tr data-id="${h.id}">
-        <td>${h.id}</td>
-        <td>${escapeHtml(h.name)}</td>
-        <td>${h.country}</td>
+    tbody.innerHTML = state.<entities>.map(row => `
+      <tr data-id="${row.id}">
+        <td>${row.id}</td>
+        <!-- Render every column from source kendo-grid-column / table headers -->
+        <!-- DO NOT curate columns — see "Copy-from-source discipline" -->
+        <td>${escapeHtml(row.<field-1>)}</td>
+        <td>${row.<field-2>}</td>
         <td>...</td>
         <td>
-          <button class="btn btn-link" onclick="openEditDialog('${h.id}')">Edit</button>
-          <button class="btn btn-link btn-danger" onclick="deleteHotel('${h.id}')">Delete</button>
+          <button class="btn btn-link" onclick="openEditDialog('${row.id}')">Edit</button>
+          <button class="btn btn-link btn-danger" onclick="delete<Entity>('${row.id}')">Delete</button>
         </td>
       </tr>
     `).join('');
@@ -391,13 +398,13 @@ Inline this script block at the END of every prototype HTML (after the body cont
     return data;
   }
 
-  function handleSubmit(formId, mode, hotelId) {
+  function handleSubmit(formId, mode, recordId) {
     return function(e) {
       e.preventDefault();
       const data = validateForm(e.target);
       if (!data) return;
-      if (mode === 'create') createHotel(data);
-      else if (mode === 'edit') updateHotel(hotelId, data);
+      if (mode === 'create') create<Entity>(data);
+      else if (mode === 'edit') update<Entity>(recordId, data);
       // Close modal
       const modalId = e.target.closest('.modal-overlay').id;
       document.getElementById(modalId).hidden = true;
@@ -406,24 +413,26 @@ Inline this script block at the END of every prototype HTML (after the body cont
 
   // ─── Edit dialog prefill ────────────────────────────────────────────
   function openEditDialog(id) {
-    const hotel = state.hotels.find(h => h.id === id);
-    if (!hotel) return;
-    const form = document.getElementById('hotel-master-form');
-    Object.entries(hotel).forEach(([k, v]) => {
+    const record = state.<entities>.find(x => x.id === id);
+    if (!record) return;
+    const form = document.getElementById('<entity>-master-form');
+    if (!form) { console.warn('<entity>-master-form not in DOM'); return; }
+    Object.entries(record).forEach(([k, v]) => {
       const input = form.querySelector(`[name="${k}"]`);
       if (input) input.value = v;
     });
     form.dataset.mode = 'edit';
     form.dataset.id = id;
-    document.getElementById('modal-hotel-master').hidden = false;
+    document.getElementById('modal-<entity>-master').hidden = false;
   }
 
   function openCreateDialog() {
-    const form = document.getElementById('hotel-master-form');
+    const form = document.getElementById('<entity>-master-form');
+    if (!form) { console.warn('<entity>-master-form not in DOM'); return; }
     form.reset();
     form.dataset.mode = 'create';
     delete form.dataset.id;
-    document.getElementById('modal-hotel-master').hidden = false;
+    document.getElementById('modal-<entity>-master').hidden = false;
   }
 
   // ─── Toast helper ───────────────────────────────────────────────────
@@ -449,12 +458,12 @@ Inline this script block at the END of every prototype HTML (after the body cont
   // ─── Wire form submit + initial render ──────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     renderGrid();
-    const form = document.getElementById('hotel-master-form');
+    const form = document.getElementById('<entity>-master-form');
     if (form) {
       form.addEventListener('submit', e => {
         const mode = form.dataset.mode;
         const id = form.dataset.id;
-        handleSubmit('hotel-master-form', mode, id)(e);
+        handleSubmit(form.id, mode, id)(e);
       });
     }
   });
@@ -484,15 +493,15 @@ input.error, select.error, textarea.error { border-color: var(--color-danger) !i
 
 <!-- Edit/Delete buttons in grid (rendered by renderGrid()) -->
 
-<!-- Form inside modal -->
-<form id="hotel-master-form">
+<!-- Form inside modal — replace <entity> with the kebab-case entity name -->
+<form id="<entity>-master-form">
   <div class="input">
-    <label for="name">Hotel Name *</label>
+    <label for="name"><Entity-label-text> *</label>
     <input id="name" name="name" required minlength="3" />
   </div>
   ...
   <button type="submit" class="btn btn-primary">Save</button>
-  <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-hotel-master').hidden=true">Cancel</button>
+  <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-<entity>-master').hidden=true">Cancel</button>
 </form>
 ```
 
@@ -513,8 +522,8 @@ This is one of the easiest things to get wrong. When the source has a CTA that o
 **Read `dialog-detection.json` from the imported theme.** It maps each feature route to the dialogs that route opens:
 
 ```json
-"ho-hotel-contents": [
-  { "kind": "app-dialog", "header": "Hotel Master", "modalSize": "lg" },
+"<feature-route-name>": [
+  { "kind": "app-dialog", "header": "<Dialog Title>", "modalSize": "lg" },
   { "kind": "app-dialog", "header": "Hotel Contents Mapping", "modalSize": "lg" },
   { "kind": "app-dialog", "header": "Add Region", "modalSize": "sm" },
   ...

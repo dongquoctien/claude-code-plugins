@@ -1,6 +1,6 @@
 # Stack knowledge — Angular
 
-Read this when `manifest.stack.framework === "angular"`. Especially relevant for oh-admin–style enterprise admins (Angular 9+ with Kendo / NgRx / ng-select).
+Read this when `manifest.stack.framework === "angular"`. Especially relevant for **enterprise admin** Angular projects (Angular 9+ with Kendo UI / Angular Material / PrimeNG / NgRx / ng-select / similar libraries). Code samples below cite a specific real-world admin (`oh-admin`) as a reference pattern; the same patterns recur across most KR/JP/EU enterprise Angular admins. When you encounter different conventions in a different project, follow that project's conventions.
 
 ## How styles flow at build time (and why source files mislead you)
 
@@ -15,7 +15,7 @@ Read this when `manifest.stack.framework === "angular"`. Especially relevant for
 
 ## Variable naming convention quirks
 
-- Many Angular admins (Korea-built, oh-admin–lineage) use `$--name` (double-leading-dash) SCSS variables, e.g. `$--primary: #96ddf2`, `$--xs: 24px`. The plugin's crawl-styles already handles this, but if you write CSS yourself, remember the leading `--` is part of the SCSS variable name, NOT a CSS custom-property prefix.
+- Many Korean/Japanese enterprise Angular admins use `$--name` (double-leading-dash) SCSS variables, e.g. `$--primary: #96ddf2`, `$--xs: 24px`. The plugin's crawl-styles already handles this, but if you write CSS yourself, remember the leading `--` is part of the SCSS variable name, NOT a CSS custom-property prefix.
 - A separate `:root` block in the same project holds proper CSS custom properties (`--primary`, `--theme-color1`...). These ARE the runtime tokens — prefer them over the SCSS sources when both exist.
 
 ## Multi-theme system (data-theme attribute)
@@ -30,7 +30,7 @@ html[data-theme=sky] { /* override */ }
 
 The detector picks `themeList[0]` from `theme.component.ts` as the default. Pass `--theme-variant <name>` to crawl-styles so the active variant overlays `:root`. Never assume `:root` alone is correct — it's often the dark variant by default.
 
-## Common admin layout class names (oh-admin style — match by name when possible)
+## Common admin layout class names (typical enterprise Angular admin — match by name when present in the imported source.css)
 
 | Region | Class |
 |---|---|

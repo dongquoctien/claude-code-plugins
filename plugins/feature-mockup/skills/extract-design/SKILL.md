@@ -142,7 +142,7 @@ Now do the actual work, in this order:
    ```bash
    node {pluginRoot}/scripts/detect-dialogs.mjs --in {projectRoot} --out {tmpDir}/dialog-detection.json
    ```
-   Scans all framework templates and component classes for dialog/modal/toast usage. Output is a per-feature map of every `<app-dialog>`, `<kendo-dialog>`, `<mat-dialog>`, `<p-dialog>`, `<el-dialog>`, `<v-dialog>`, `<a-modal>`, `<Dialog>`, `<DialogContent>`, `<Modal>` with header text and modal size, plus a global toast/alert call count and message samples. Verified on oh-admin: detected 272 dialogs across 101 feature routes, 1208 toast/alert calls. Critical for the prototype-builder so it renders dialogs as overlays (not separate pages) and includes toast/snackbar feedback after submit actions.
+   Scans all framework templates and component classes for dialog/modal/toast usage. Output is a per-feature map of every `<app-dialog>`, `<kendo-dialog>`, `<mat-dialog>`, `<p-dialog>`, `<el-dialog>`, `<v-dialog>`, `<a-modal>`, `<Dialog>`, `<DialogContent>`, `<Modal>` with header text and modal size, plus a global toast/alert call count and message samples. Reference benchmark on a real admin codebase (`oh-admin`): detected 272 dialogs across 101 feature routes, 1208 toast/alert calls. Critical for the prototype-builder so it renders dialogs as overlays (not separate pages) and includes toast/snackbar feedback after submit actions.
 
 2c. **Source files — copy templates and components.** Run:
    ```bash
@@ -153,13 +153,13 @@ Now do the actual work, in this order:
    - Vue / Svelte: `.vue` / `.svelte` SFCs
    - React/Next.js: PascalCase `.tsx`/`.jsx` files
 
-   **Why this matters:** the BA usually doesn't have the dev's source repo. Without this step, `source-index.json` lists paths the BA's agent cannot resolve. Copying the actual files makes the export self-contained — the BA agent can `Read` any path it sees in `source-index.json`. Verified on oh-admin: 3074 files (1153 templates + 1157 components + 387 services + 362 modules) = 12.5 MB.
+   **Why this matters:** the BA usually doesn't have the dev's source repo. Without this step, `source-index.json` lists paths the BA's agent cannot resolve. Copying the actual files makes the export self-contained — the BA agent can `Read` any path it sees in `source-index.json`. Reference benchmark on a real admin codebase (`oh-admin`): 3074 files (1153 templates + 1157 components + 387 services + 362 modules) = 12.5 MB.
 
 2d. **Form validators.** Run:
    ```bash
    node {pluginRoot}/scripts/extract-validators.mjs --in {projectRoot} --out {tmpDir}/validators.json
    ```
-   Extracts per-field validation rules (Angular `Validators.required/email/min/max/pattern`, class-validator decorators `@IsEmail`/`@MinLength`/`@Min`/`@IsNotEmpty`, HTML5 attributes `required`/`type=email`/`pattern=`/`minlength=`). Output groups by feature route. The BA-side prototype embeds these rules in inline JS and runs them on form submit (alongside HTML5 native validation). Without this file, prototype forms accept any input and the demo doesn't realistically reject bad data. Verified on oh-admin: 1129 fields with 1192 rules across 100+ routes.
+   Extracts per-field validation rules (Angular `Validators.required/email/min/max/pattern`, class-validator decorators `@IsEmail`/`@MinLength`/`@Min`/`@IsNotEmpty`, HTML5 attributes `required`/`type=email`/`pattern=`/`minlength=`). Output groups by feature route. The BA-side prototype embeds these rules in inline JS and runs them on form submit (alongside HTML5 native validation). Without this file, prototype forms accept any input and the demo doesn't realistically reject bad data. Reference benchmark on a real admin codebase (`oh-admin`): 1129 fields with 1192 rules across 100+ routes.
 
 2e1. **Event handlers + UX flows.** Run:
    ```bash
@@ -167,7 +167,7 @@ Now do the actual work, in this order:
    ```
    Multi-stack scanner (Angular component.ts, Vue SFC `<script setup>`, React tsx, Svelte) that pulls every event handler method (onSave, onDelete, onSubmit, openXxxDialog, ...) and tags the actions inside its body: toast / dialog-open / dialog-close / navigate / http-get/post/put/delete / ngrx-dispatch / pinia-action / form-submit / form-reset / event-emit. Plus extracts trigger bindings from templates (`(click)="..."`, `@click="..."`, `onClick={...}`).
 
-   The BA-side prototype-builder uses this to auto-wire JS handlers with the correct UX flow: e.g. `onSaveHotel` → validate form → store mutation → toast "Saved" → close modal. Without events.json, the agent guesses the flow from dialog headers + brief text and misses real product behavior. Verified on oh-admin: 3492 handlers + 5134 actions + 1634 template triggers across 130 routes.
+   The BA-side prototype-builder uses this to auto-wire JS handlers with the correct UX flow: e.g. `onSave<Entity>` → validate form → store mutation → toast "Saved" → close modal. Without events.json, the agent guesses the flow from dialog headers + brief text and misses real product behavior. Reference benchmark on a real admin codebase (`oh-admin`): 3492 handlers + 5134 actions + 1634 template triggers across 130 routes.
 
 2e2. **Business rules + error messages + constants.** Run:
    ```bash
@@ -182,7 +182,7 @@ Now do the actual work, in this order:
    - Error codes referenced in source: `'ERR-REG-003'`, `'ERR-VAL-XXX'`
    - Conditional disable/hide: `[disabled]="region === 'multi'"`, `:disabled="..."`, `disabled={...}`
 
-   Verified on oh-admin: 525 rules + 331 errors + 9 constants. ho-hotel-contents alone surfaced 4 conditional alerts with real source messages ("Period accept max 3 months", "There are no items selected", etc.) — exactly the implicit business rules the prototype must demonstrate.
+   Reference benchmark on a real admin codebase (`oh-admin`): 525 rules + 331 errors + 9 constants. ho-hotel-contents alone surfaced 4 conditional alerts with real source messages ("Period accept max 3 months", "There are no items selected", etc.) — exactly the implicit business rules the prototype must demonstrate.
 
 2e. **Mock data — seed records per entity.** Run:
    ```bash
@@ -192,7 +192,7 @@ Now do the actual work, in this order:
 
    **Why this matters for the prototype:** the BA wants to demo CRUD — Create / Read / Update / Delete with realistic-looking data. Source-extracted entities (status codes, vendor lists, region tiers) ARE realistic because the dev wrote them. Plus the prototype-builder agent supplements with 5-15 invented records per main entity to fill the grid for demo. The combined seed data goes into the prototype's inline `<script>` as `SEED_DATA`, then localStorage persists user mutations across reloads.
 
-   Verified on oh-admin: 11 entities, 58 records auto-extracted from service files (e.g. `contents-mapping-data.service.ts` exposes 62 mapping row labels — perfect for filling a Contents Mapping demo without inventing copy).
+   Reference benchmark on a real admin codebase (`oh-admin`): 11 entities, 58 records auto-extracted from service files (e.g. `contents-mapping-data.service.ts` exposes 62 mapping row labels — perfect for filling a Contents Mapping demo without inventing copy).
 
 3. **Component styles — gather then AI-clean.** Run:
    ```bash
@@ -212,7 +212,7 @@ Now do the actual work, in this order:
 
 5. **Component list.** Run `crawl-components.mjs` again (without `--classify`) to write `{tmpDir}/components.list.md`:
    ```markdown
-   # Components in oh-admin (Angular 9)
+   # Components in <project-name> (<framework version>)
 
    ## Presentational
    - Button (src/app/shared/modules/button/button.component.ts)

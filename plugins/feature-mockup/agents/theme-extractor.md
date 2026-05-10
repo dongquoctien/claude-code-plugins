@@ -76,7 +76,7 @@ When the file is over ~150KB after cleanup, split by domain (e.g. `component-sty
 
 ### Multi-source merge (when both CSS and SCSS sources exist)
 
-Real-world admin systems (oh-admin, etc.) often ship BOTH a compiled `*-theme.css` (full palette including `--theme-color1..11`) AND a `base-theme.scss` (sizing tokens like `--common-radius: 3px`, `$--xs: 24px`). When the dev's export `manifest.json` mentions both, run the script twice and merge:
+Real-world enterprise admin codebases often ship BOTH a compiled `*-theme.css` (full palette including a `--theme-color1..N` neutral ramp) AND a `base-theme.scss` (sizing tokens like `--common-radius: 3px`, `$--xs: 24px`). When the dev's export `manifest.json` mentions both, run the script twice and merge:
 
 1. CSS-vars output → wins for `colors` (richest palette, includes neutrals + semantic colors)
 2. SCSS-vars output → wins for `radii`, `spacing`, sizing aliases (because `--common-radius` lives there)
@@ -87,13 +87,9 @@ Use shallow merge per category, not whole-file. The final `tokens.json` should c
 
 When the source manifest's `stack.activeThemeVariant` is set (e.g. `"sky-black"`, `"basic"`, `"sky"`), pass it to `crawl-styles.mjs` via `--theme-variant <name>`. The script reads `:root` first, then overlays the `html[data-theme=<variant>]` block on top — this picks up the correct palette for that variant.
 
-If `activeThemeVariant` is null but the CSS file contains multiple `html[data-theme=...]` blocks, ASK THE USER which variant to use before running. Picking the wrong one produces a prototype with the right colors but wrong theme (e.g. dark sidebar when the real product uses a light one). The pluggable theme variants in oh-admin's case are:
-- `sky-black` — primary cyan + theme-color2:#333 (dark sidebar)
-- `sky` — primary cyan + theme-color2:#fff (light sidebar)
-- `base` — primary orange + theme-color2:#333 (dark sidebar)
-- `basic` — primary orange + theme-color2:#fff (light sidebar)
+If `activeThemeVariant` is null but the CSS file contains multiple `html[data-theme=...]` blocks, ASK THE USER which variant to use before running. Picking the wrong one produces a prototype with the right colors but wrong theme (e.g. dark sidebar when the real product uses a light one). Multi-variant projects typically ship 2–4 themes named after a brand color + light/dark suffix (e.g. `<brand>` light + `<brand>-black` dark variants).
 
-The user-facing question must include the visible difference: "Which theme variant matches the product UI you're trying to mirror? Variant `sky` has a light sidebar with cyan accents; variant `sky-black` has a dark sidebar."
+The user-facing question must include the visible difference between the candidate variants — list each with its primary color + sidebar color so the user can pick the one matching their target screenshot. Example phrasing: "Which theme variant matches the product UI you're trying to mirror? Variant A has a light sidebar with `<color>` accents; variant B has a dark sidebar."
 
 The script's output `tokens.json` follows this canonical shape:
 
@@ -140,7 +136,7 @@ Map the canonical token shape to the variable names the template uses:
   --color-sidebar-fg: <theme-color11 or #fff>;
 
   /* Sizing aliases — admin systems often define button heights as $--xs, $--md, etc. */
-  --h-xs: <24px from oh-admin's $--xs, fallback 28px>;
+  --h-xs: <e.g. 24px from source's $--xs / button-height-xs token, fallback 28px>;
   --h-sm: 32px;
   --h-md: 38px;
   --h-lg: 50px;
@@ -168,7 +164,7 @@ If `typography.fontSans` mentions a non-system font (Pretendard, Inter, Roboto, 
 
 Write CSS rules that override the template's defaults so prototypes inherit the real product's density and feel:
 
-- `.btn-primary`, `.btn-ghost`, `.btn-danger` — use `--h-xs` for height (24px in oh-admin, NOT 40px Tailwind default), `--radius` (3px in oh-admin), correct colors. Include `:hover` state with `--color-primary-darken`.
+- `.btn-primary`, `.btn-ghost`, `.btn-danger` — use `--h-xs` for height (typical admin compact value 24-28px, NOT shadcn's 40px default), `--radius` from tokens (admin themes commonly use a tight 2-4px), correct colors. Include `:hover` state with `--color-primary-darken`.
 - `.card` — `border: 1px solid var(--color-border)`, `border-radius: var(--radius)`, padding 20px (not 1.25rem).
 - Form inputs (`input`, `select`, `textarea`, `.field-input`) — height `var(--h-xs)`, font-size `var(--font-size-xs)`, border-color on focus uses `--color-primary`.
 - `.k-grid` — Kendo-style table for admin systems with Kendo: header bg `#f2f2f2`, cell padding `6px 10px`, hover row `#f9f9f9`, `font-size: var(--font-size-xs)`.

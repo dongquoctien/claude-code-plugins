@@ -28,7 +28,7 @@ Most planning tools stop at a spec. By the time devs read it, the BA has already
 
 ```bash
 # Run from inside your front-end project root (where package.json or angular.json lives)
-cd D:/Code/oh-admin
+cd <path-to-your-frontend-project>
 /feature-mockup:extract-design
 
 # A wizard walks through stack detection, style sources, and component selection,
@@ -45,10 +45,10 @@ cd D:/Code/oh-admin
 /feature-mockup:ingest-theme ./from-dev/fe-design-export.zip
 
 # 3. Make your first prototype — text + screenshots + docs in any combination
-/feature-mockup:make "booking-cancel-flow" ./screenshots/cancel-1.png ./refs/policy.md
+/feature-mockup:make "<feature-name>" ./screenshots/some-screen.png ./refs/spec.md
 
 # 4. (Phase 3) Open the result in a browser
-/feature-mockup:preview "booking-cancel-flow"
+/feature-mockup:preview "<feature-name>"
 ```
 
 ## How it works
