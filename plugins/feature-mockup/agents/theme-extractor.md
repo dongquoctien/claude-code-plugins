@@ -36,6 +36,29 @@ Pick the highest-priority source that exists:
 
 If the script exits non-zero, READ ITS STDERR — it will tell you what's wrong (e.g., "no recognized token source"). Do not silently swallow errors.
 
+### Component styles (Angular/Vue/Svelte) — AI cleanup pipeline
+
+Framework component styles (`*.component.scss`, Vue `<style>` blocks, Svelte `<style>`) are typically **encapsulated** at build time and don't appear cleanly in any single CSS file. The export pipeline handles them in two phases:
+
+**Phase 1 (mechanical):** When the export contains `component-styles.raw.scss` (produced by `scripts/concat-component-styles.mjs`), DO NOT just copy it — the file contains:
+- Unresolved `$variables` and `@include` calls
+- `:host`, `:host-context`, `::ng-deep` Angular-specific selectors
+- Lots of duplication (template demo pages share the same base styles)
+
+**Phase 2 (AI cleanup):** Read `component-styles.raw.scss` AND `tokens.json`. Produce `{outputDir}/component-styles.compiled.css` by:
+
+1. Resolve every `$variable` to its literal value using `tokens.json` (e.g. `$--primary` → `#96ddf2`).
+2. Inline simple `@include` calls when the mixin can be inferred; drop complex ones with a `/* @include skipped: <name> */` comment.
+3. Strip `:host { ... }` wrappers entirely — those rules become root rules. Remove `:host-context()` selectors. Replace `::ng-deep` with nothing (just empty space).
+4. Drop `_ngcontent-%COMP%` / `[_ngcontent-...]` attribute selectors when present.
+5. Dedupe rules: when 5+ files share the exact same `.demo-msg { ... }` block, keep one occurrence with a comment listing the consolidated paths.
+6. Reject rules that depend on Angular's component encapsulation context (e.g. selectors starting with `:host >`). These won't apply outside their original component.
+7. Keep file-of-origin comments (`/* from src/app/foo.component.scss */`) so future maintainers can trace.
+
+The result is a single, lint-clean CSS file safe to link from a static prototype.
+
+When the file is over ~150KB after cleanup, split by domain (e.g. `component-styles.bookings.css`, `component-styles.shared.css`) using the source path's first segment, then list both in the manifest's `files`.
+
 ### Multi-source merge (when both CSS and SCSS sources exist)
 
 Real-world admin systems (oh-admin, etc.) often ship BOTH a compiled `*-theme.css` (full palette including `--theme-color1..11`) AND a `base-theme.scss` (sizing tokens like `--common-radius: 3px`, `$--xs: 24px`). When the dev's export `manifest.json` mentions both, run the script twice and merge:

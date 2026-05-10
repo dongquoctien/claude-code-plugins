@@ -165,7 +165,15 @@ Now do the actual work, in this order:
    ```
    Picks the largest, component-rich compiled CSS bundle in the project (or merges the top 3 for `theme + components` split). Falls back to concatenating raw SCSS partials when no compiled bundle exists. The output preserves real component class names (.btn, .k-grid, .page-sidebar, etc.) so the prototype-builder can reuse them by name.
 
-3. **Assets — icons, images, fonts.** Run:
+3a. **Component styles — gather then AI-clean.** Run:
+   ```bash
+   node {pluginRoot}/scripts/concat-component-styles.mjs --in {projectRoot} --out {tmpDir}/component-styles.raw.scss
+   ```
+   Walks `src/**` and concatenates every Angular `*.component.scss` / `*.component.css`, plus Vue `<style>` blocks and Svelte `<style>` blocks. Output is RAW (variables not resolved, :host not stripped, duplicates not deduped) and is intended for the **AI cleanup pass** described in `theme-extractor.md`. The cleanup happens later, on the BA side, when `ingest-theme` runs — at extraction time we just gather the raw input.
+
+   When the project has no component stylesheets (pure-React without CSS modules, etc.) the script still runs and writes a near-empty file. Don't fail.
+
+4. **Assets — icons, images, fonts.** Run:
    ```bash
    node {pluginRoot}/scripts/crawl-assets.mjs --in {projectRoot} --out {tmpDir}/assets [--font-budget-mb 6] [--skip-fonts]
    ```
@@ -207,6 +215,7 @@ Now do the actual work, in this order:
        "tokens": "tokens.json",
        "globalsCss": "globals.css",
        "stylesCompiled": "styles.compiled.css",
+       "componentStylesRaw": "component-styles.raw.scss",
        "assetsManifest": "assets/_assets-manifest.json",
        "componentsList": "components.list.md"
      },
