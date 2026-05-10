@@ -376,21 +376,23 @@ Rules from earlier static-prototype guidance still apply:
 
 ### 8d. App entry (`src/App.tsx`, `src/main.tsx`)
 
-Wire react-router with a single route per page (most admin features have 1-2 pages; the rest is dialogs):
+Wire react-router with a single route per page (most admin features have 1-2 pages; the rest is dialogs).
+
+**CRITICAL — use `HashRouter`, NOT `BrowserRouter`.** The prototype's `dist/index.html` is opened via `file://` (BA double-clicks) or via static hosts that don't rewrite paths. `BrowserRouter` calls `history.replaceState` which throws `SecurityError` on `file://` and 404s on static hosts when navigating to nested routes. `HashRouter` uses `#/foo` paths that work everywhere.
 
 ```tsx
-import { BrowserRouter, Routes, Route } from 'react-router'
+import { HashRouter, Routes, Route } from 'react-router'
 import { Toaster } from 'sonner'
 import HotelContentList from '@/pages/HotelContentList'
 
 export function App() {
   return (
     <>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/" element={<HotelContentList />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
       <Toaster richColors position="bottom-right" />
     </>
   )
