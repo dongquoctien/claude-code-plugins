@@ -132,6 +132,12 @@ Now do the actual work, in this order:
    ```
    Produces a categorized map of every CSS/SCSS file, component, template, route folder, image, and font with size + one-line summaries. The downstream AI agent reads this index BEFORE individual files so it can prioritize globalStyles + themeFiles + componentStyles intelligently.
 
+2b. **Icon library + brand assets.** Run:
+   ```bash
+   node {pluginRoot}/scripts/detect-icons.mjs --in {projectRoot} --out {tmpDir}/icon-detection.json
+   ```
+   Detects which icon library the project actually uses (FontAwesome / Lucide / Material / Heroicons / Phosphor / custom-svg / custom-png / none) and locates the brand logo (`header-logo*.png|svg`, `app-logo*.png|svg`). Without this, the agent defaults to Lucide and uses a text-only logo — which is wrong for any project using FontAwesome / Material / a real PNG logo. The icon library + logo path go into `manifest.brand` and `manifest.stack.iconLibrary` so the prototype-builder can pick the matching CDN and link the real logo image.
+
 3. **Component styles — gather then AI-clean.** Run:
    ```bash
    node {pluginRoot}/scripts/concat-component-styles.mjs --in {projectRoot} --out {tmpDir}/component-styles.raw.scss
@@ -176,15 +182,22 @@ Now do the actual work, in this order:
        "uiLib": "<detected, or 'none'>",
        "tokenSource": "<which candidate was used>",
        "activeThemeVariant": "<from detector, or null>",
-       "routes": [ /* up to 100 route folder names from detector */ ]
+       "routes": [ /* up to 100 route folder names from detector */ ],
+       "iconLibrary": "<from icon-detection.json — fontawesome | lucide | material-icons | heroicons | phosphor | custom-svg | custom-png | none>"
      },
      "files": {
        "tokens": "tokens.json",
        "globalsCss": "globals.css",
        "sourceIndex": "source-index.json",
+       "iconDetection": "icon-detection.json",
        "componentStylesRaw": "component-styles.raw.scss",
        "assetsManifest": "assets/_assets-manifest.json",
        "componentsList": "components.list.md"
+     },
+     "brand": {
+       "logo": "<from icon-detection.json>",
+       "logoVariants": [/* additional matching files */],
+       "favicon": "<from icon-detection.json>"
      },
      "components": [ /* same names from crawl, with framework + path */ ]
    }

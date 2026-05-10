@@ -73,6 +73,36 @@ If components import from `@ngrx/store` or use `select(...)` operators, they're 
 - `formGroup` + `formControlName` — reactive forms. Same treatment: plain inputs.
 - `<button type="button" (click)="..">` — strip `(click)` handlers; replace with `onclick="alert('(prototype) ...')"` or a navigation `<a>`.
 
+## Icon and brand assets — detect, don't assume
+
+Angular admin templates rarely use Lucide. The most common patterns:
+
+- **FontAwesome** (oh-admin, most KR/JP enterprise admins) — `<i class="fas fa-desktop"></i>`. Loaded via `@fortawesome/fontawesome-free` package + a global SCSS `@import "~@fortawesome/.../all.min.css"`.
+- **Material Icons** (Angular Material projects) — `<mat-icon>home</mat-icon>` or `<span class="material-icons">home</span>`.
+- **PrimeIcons** (PrimeNG projects) — `<i class="pi pi-home"></i>`.
+- **Custom PNG/SVG sprites** — `<img src="/assets/images/icons/ico-bed.svg">`. Many older Korean admin templates use this pattern with `ico-*.png` and `ico-*.svg` files in `assets/images/icons/`.
+
+The plugin runs `detect-icons.mjs` to figure this out. Read `manifest.stack.iconLibrary` and `manifest.brand.logo` before generating the prototype:
+- For oh-admin specifically: `iconLibrary === "fontawesome"`, brand logo at `src/assets/images/common/header-logo-white.png`.
+- Use FontAwesome class names that appear in `icon-detection.json` `iconSamples` (real names from real templates) when picking icons for the prototype's nav and toolbars.
+- Render the brand logo as `<img>` when the file is in `assets/`. The text-logo fallback ("OOHMYHOTEL&CO" with cyan accent) is only when no PNG/SVG logo was detected.
+
+## Sidebar nav structure (oh-admin pattern)
+
+The real oh-admin sidebar has TWO sections:
+
+1. **Favorites** (top, with star icon header) — flat list of starred menu items, each highlighted with `class="active has-dot"` (cyan dot) when current. The dot is a `::before` pseudo-element with `position: absolute; right: 18-22px`.
+
+2. **Domain groups** (below Favorites) — each rendered as `<app-layout-sidebar-menu-group>` with:
+   - Group title row: FontAwesome icon (`fa-desktop` for Bookings, `fa-hotel` for Products, `fa-plane-departure` for Marketing, `fa-briefcase` for Users, `fa-cogs` for Settlement) + group name + chevron-up/down on the right
+   - Expandable subgroup body with nested items
+   - 8 default groups: **Bookings / Products / Marketing / Users / Settlement / Flight DSR/BSP / System Control / Statistics**
+
+When generating the admin shell:
+- Read `manifest.stack.routes` to seed the menu items, but ALSO read the actual `app-layout-sidebar-menu-group` template if present in source (`grep "app-layout-sidebar-menu-group" src/`).
+- Use FontAwesome icons matching each group's domain.
+- Even if the prototype only highlights ONE menu item as active, render the full 8 groups so the prototype looks like a real admin shell, not a stub.
+
 ## What the agent should do when reading source-index.json for an Angular project
 
 1. Read `themeFiles` first — `base-theme.scss`, `basic-theme.scss`, `*-theme.css`. Tokens live here.

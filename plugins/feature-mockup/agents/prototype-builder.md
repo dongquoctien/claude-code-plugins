@@ -150,15 +150,25 @@ The goal is dense admin UI: small fonts (`var(--font-size-xs)` ≈ 12px), tight 
 
 The prototype must NEVER use emoji characters (✅, ⚠️, 🎉, 🔥, etc.) for any visual indicator. They render inconsistently across OSes and look unprofessional in stakeholder demos.
 
-**Use Lucide icons** (already loaded in the html-tailwind template via CDN). To render an icon:
+**Match the source product's icon library.** Read `manifest.stack.iconLibrary` (or `icon-detection.json` `iconLibrary` field) and use that library in the prototype:
 
-```html
-<i data-lucide="<icon-name>" class="w-5 h-5"></i>
-```
+| `iconLibrary` value | CDN to load in `<head>` | How to render an icon |
+|---|---|---|
+| `fontawesome` | `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">` | `<i class="fas fa-<name>"></i>` |
+| `lucide` (default fallback) | `<script src="https://unpkg.com/lucide@latest"></script>` + call `lucide.createIcons()` | `<i data-lucide="<name>"></i>` |
+| `material-icons` | `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">` | `<span class="material-icons"><name></span>` |
+| `heroicons` | (no CDN — copy SVG inline) | `<svg>...</svg>` from heroicons.com |
+| `phosphor` | `<link href="https://unpkg.com/@phosphor-icons/web@2/src/regular/style.css" rel="stylesheet">` | `<i class="ph ph-<name>"></i>` |
+| `primeicons` | `<link href="https://unpkg.com/primeicons/primeicons.css" rel="stylesheet">` | `<i class="pi pi-<name>"></i>` |
+| `tabler` | `<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">` | `<i class="ti ti-<name>"></i>` |
+| `custom-svg` / `custom-png` | (no CDN) | `<img src="assets/images/icons/ico-<name>.svg">` — use icon paths from `manifest.assetsManifest` |
+| `none` | Lucide fallback | Same as `lucide` row |
 
-The template's bottom `<script>` calls `lucide.createIcons()` once on load — any `<i data-lucide="...">` tags in the page get replaced with inline SVG automatically. If you inject icons into a page that already loaded, call `lucide.createIcons()` again.
+When `manifest.stack.iconLibrary === "fontawesome"` and the source's templates use `fa-desktop`, `fa-hotel`, `fa-plane-departure` (visible in `icon-detection.json` `iconSamples`), use those exact icon names in the prototype. Don't translate to a different library.
 
-**Common icon name mapping** (use these exact Lucide names — they exist in the standard set):
+**Brand logo:** Read `manifest.brand.logo` (e.g. `src/assets/images/common/header-logo-white.png`). When this exists AND `manifest.assetsManifest` confirms the file was copied into `assets/`, render it as `<img src="assets/images/common/header-logo-white.png" class="page-logo-img" alt="Brand logo">` instead of inline text. Fall back to a styled text logo only when no logo image is detected.
+
+**Lucide icon name mapping** (use only when iconLibrary is `lucide` or `none`):
 
 | Intent | Lucide name |
 |---|---|
