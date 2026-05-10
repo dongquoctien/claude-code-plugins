@@ -66,7 +66,9 @@ function nextEventId(t) {
 function recomputePhase(t) {
   const last = t.events[t.events.length - 1];
   if (!last) return 'drafted';
-  const pendingCount = t.pending.gaps.filter(g => !g.resolvedBy).length;
+  // Only P0+P1 block "fixed" phase. P2 issues are optional polish — they remain
+  // pending in STATUS.md but don't keep the feature in "fixing" indefinitely.
+  const blockingPending = t.pending.gaps.filter(g => !g.resolvedBy && (g.priority === 'P0' || g.priority === 'P1')).length;
   switch (last.kind) {
     case 'init': return 'drafted';
     case 'theme-import': return 'themed';
@@ -76,7 +78,7 @@ function recomputePhase(t) {
       return hadVerify ? t.currentPhase : 'previewed';
     }
     case 'verify': return 'verified';
-    case 'fix': return pendingCount === 0 ? 'fixed' : 'fixing';
+    case 'fix': return blockingPending === 0 ? 'fixed' : 'fixing';
     case 'deploy': return 'deployed';
     default: return t.currentPhase;
   }
@@ -167,26 +169,49 @@ function regenerateStatus(t) {
   lines.push('## Suggested next step');
   lines.push('');
   const feature = t.feature;
-  if (pending.some(g => g.priority === 'P0' || g.priority === 'P1')) {
-    const cnt = pending.filter(g => g.priority === 'P0' || g.priority === 'P1').length;
+  // Filesystem signature: prototype actually exists on disk?
+  // (Handles cases where the user copied a folder or the prototype pre-dates v0.21
+  // — in either case the timeline lacks a 'make' event but files exist.)
+  const prototypeOnDisk =
+    fs.existsSync(path.join(FEATURE_DIR, 'index.html')) ||
+    fs.existsSync(path.join(FEATURE_DIR, 'package.json'));
+  const hasMakeEvent = t.events.some(e => e.kind === 'make');
+  const hasPrototype = hasMakeEvent || prototypeOnDisk;
+  const blockingPending = pending.filter(g => g.priority === 'P0' || g.priority === 'P1');
+
+  if (blockingPending.length > 0) {
+    const cnt = blockingPending.length;
     lines.push(`You have ${cnt} P0/P1 ${cnt === 1 ? 'issue' : 'issues'} to fix. Run:`);
     lines.push('');
     lines.push('```');
     lines.push(`/feature-mockup:fix ${feature}`);
     lines.push('```');
+    if (pending.length > blockingPending.length) {
+      const p2cnt = pending.length - blockingPending.length;
+      lines.push('');
+      lines.push(`(Plus ${p2cnt} P2 polish ${p2cnt === 1 ? 'item' : 'items'} you can address later.)`);
+    }
   } else if (t.events.some(e => e.kind === 'fix') && !t.events.some(e => e.kind === 'deploy')) {
-    lines.push('All fixes applied. Ready to share with stakeholders:');
+    lines.push('All P0/P1 fixes applied. Ready to share with stakeholders:');
     lines.push('');
     lines.push('```');
     lines.push(`/feature-mockup:deploy ${feature}`);
     lines.push('```');
-  } else if (t.events.some(e => e.kind === 'make') && !t.events.some(e => e.kind === 'verify')) {
-    lines.push('Prototype generated but not verified yet. Compare it against the real admin or screenshots:');
+    if (pending.length > 0) {
+      lines.push('');
+      lines.push(`(${pending.length} P2 polish ${pending.length === 1 ? 'item' : 'items'} remain — non-blocking, address before final delivery if you want.)`);
+    }
+  } else if (hasPrototype && !t.events.some(e => e.kind === 'verify')) {
+    lines.push('Prototype is ready but not verified yet. Compare it against the real admin or screenshots:');
     lines.push('');
     lines.push('```');
     lines.push(`/feature-mockup:verify ${feature}`);
     lines.push('```');
-  } else if (!t.events.some(e => e.kind === 'make')) {
+    if (!hasMakeEvent && prototypeOnDisk) {
+      lines.push('');
+      lines.push('_(Note: this prototype existed before timeline tracking. Earlier history is not recorded.)_');
+    }
+  } else if (!hasPrototype) {
     lines.push('Generate the prototype:');
     lines.push('');
     lines.push('```');
