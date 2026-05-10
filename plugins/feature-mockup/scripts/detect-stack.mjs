@@ -102,9 +102,28 @@ const scssVarsScored = scssVarFiles
   .sort((a, b) => b.score - a.score);
 if (scssVarsScored[0]) tokenSourceCandidates.push({ type: 'scss-vars', path: scssVarsScored[0].path });
 
-// CSS variables (fallback)
-const cssVarFiles = stylesEntries.filter(p => p.endsWith('.css'));
-for (const f of cssVarFiles) tokenSourceCandidates.push({ type: 'css-vars', path: f });
+// CSS variables — score by content (count of -- declarations) and prefer compiled theme files
+const cssVarCandidates = [
+  ...stylesEntries.filter(p => p.endsWith('.css')),
+  // Compiled theme CSS files often live here (Angular/Vue admin patterns)
+  'src/assets/css/base-theme.css', 'src/assets/css/basic-theme.css',
+  'src/assets/css/theme.css', 'src/assets/css/sky-theme.css',
+  'src/assets/styles/theme.css', 'public/theme.css',
+];
+const cssVarsScored = [...new Set(cssVarCandidates)]
+  .filter(p => exists(p))
+  .map(p => {
+    let score = 0;
+    try {
+      const content = fs.readFileSync(path.join(ROOT, p), 'utf8');
+      const matches = content.match(/--[\w-]+\s*:/g);
+      score = matches ? matches.length : 0;
+    } catch {}
+    return { path: p, score };
+  })
+  .filter(c => c.score > 0)
+  .sort((a, b) => b.score - a.score);
+for (const c of cssVarsScored) tokenSourceCandidates.push({ type: 'css-vars', path: c.path });
 
 // ─── Component directories ────────────────────────────────────────────
 const componentDirs = [];

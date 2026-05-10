@@ -80,6 +80,26 @@ For each screen:
   - For `<select>`, the placeholder should be a disabled selected `<option>` so it acts like a real placeholder.
 
 For `EmptyState`, `Toast`, success/error indicators, or any visual ornament: use a Lucide icon (see icon rules above). Never use emoji.
+
+### Admin-system component recipes
+
+When the admin shell is active (Step 5b), render brief components with these patterns instead of generic Tailwind cards:
+
+- **Table** — wrap in `<div class="k-grid"><table>`. Header cells use `<th>` with `text-align: left`. Body rows have hover state from theme.css. For multi-select tables, the first `<th>` and `<td>` is a 36px-wide checkbox column. Right-align numeric columns with `<td style="text-align:right;">`.
+
+- **Toolbar above tables** — `<div class="toolbar">` containing summary text on the left, action buttons on the right via `<div class="ml-auto flex gap-2">`. Always show a count like "4 / 6 đã chọn" + total value when relevant.
+
+- **Filters / search bar** — wrap inputs in `<div class="card"><div class="grid-3">`. Each filter is a `<div>` with `<label class="field-label">` + input. Search/Reset buttons live in a flex container in the last grid cell.
+
+- **Stat cards** for results screens — three or four `<div class="card stat-card">` blocks each with `<span class="stat-label">` (small grey) + `<span class="stat-value">` (large bold). Color the value with `--color-success` or `--color-danger` based on intent.
+
+- **Alert banners** — `<div class="alert">` with a Lucide icon + message. Border-left 3px solid in info/success/warning/danger color.
+
+- **Summary panels** — for confirm screens, render a 2-column layout `style="grid-template-columns: 2fr 1fr"`: detail table on the left, summary card on the right with stat-style key→value pairs.
+
+- **Per-row actions** in result tables — the last column is "Hành động" with text links like `<a style="color: var(--color-primary-darken)">Xem chi tiết</a>`.
+
+The goal is dense admin UI: small fonts (`var(--font-size-xs)` ≈ 12px), tight padding, lots of information per screen.
 - Render CTAs as styled buttons. `action: "navigate:<id>"` becomes a link to that screen. `action: "submit"` shows an alert/toast then navigates to the next screen in `flow`.
 
 ### Icon rules (no emojis — ever)
@@ -143,6 +163,48 @@ Add a small "Prototype Navigator" floating widget to every screen so reviewers c
 For `html-tailwind`, this is a fixed-position `<nav>` injected at the bottom of `<body>`. The nav links must follow the link-path rules above — re-derive the `href` per file, not once globally.
 
 For `react-vite`, this is a `<PrototypeNav />` component rendered in the layout. React-router handles paths so no per-file rewriting needed.
+
+## Step 5b — Admin shell (when target is an admin/dashboard system)
+
+Read `{themeDir}/source-manifest.json` if `themeBranch === "real-system"`. When `stack.uiLib` is one of `kendo`, `material`, `antd`, `chakra` — OR when the original framework is Angular/Vue with no UI library AND the imported tokens include `--color-sidebar-bg` — wrap every screen in a full admin layout instead of the centered single-column layout.
+
+Layout structure (HTML):
+
+```html
+<body>
+  <div class="layout">
+    <aside class="page-sidebar">
+      <div class="page-logo">{appName}</div>
+      <ul class="nav-menu">
+        <!-- 5–8 fake nav items relevant to the feature's domain.
+             Mark the item that contains the current feature as class="active". -->
+        <li class="active"><a href="#"><i data-lucide="calendar-check" class="w-4 h-4"></i><span>Booking</span></a></li>
+        ...
+      </ul>
+    </aside>
+    <div class="main">
+      <header class="page-header">
+        <h1 class="page-title">{screen.title}</h1>
+        <span class="breadcrumb"><a href="#">Booking</a> / <a href="#">Quản lý</a> / {screen.title}</span>
+        <div class="ml-auto flex gap-2">
+          <i data-lucide="bell" class="w-4 h-4"></i>
+          <i data-lucide="user-circle" class="w-5 h-5"></i>
+        </div>
+      </header>
+      <div class="page-content">
+        <!-- screen body here: filters, table, forms, summary cards, alerts -->
+      </div>
+    </div>
+  </div>
+  <!-- Prototype Navigator (existing) -->
+</body>
+```
+
+Pick `appName` from `manifest.name` in the source manifest (e.g., "oh-admin"). Pick the active nav item by matching the feature's domain to one of the nav labels you generate.
+
+The `theme.css` already provides `.page-sidebar`, `.page-logo`, `.nav-menu`, `.page-header`, `.layout`, `.main` classes.
+
+When the target is a customer-facing site (no admin signals — no Kendo/Material/AntD, no `--color-sidebar-bg`), keep the centered single-column layout from Step 4.
 
 ## Step 6 — Write a README inside the prototype folder
 

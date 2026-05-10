@@ -175,24 +175,37 @@ function classifyVars(vars) {
   // A value is "size-like" if it's a number with a CSS unit.
   const SIZE_VALUE_RE = /^-?\d*\.?\d+(px|rem|em|%|vh|vw|ch|ex|pt|pc|in|cm|mm)?$/i;
 
+  // Skip variables that are computed (HSL math, var() chains) — they don't help downstream.
+  const COMPUTED_VAL_RE = /^(hsl|rgb|calc)\([^)]*var\(/i;
+  // Skip RGB triplet vars (--primary-rgb: 150, 221, 242) — they're helpers, not the canonical token.
+  const isRgbHelper = (k, v) => /-rgb$/.test(k) && /^\d+\s*,\s*\d+\s*,\s*\d+/.test(v);
+
   for (const [rawK, rawV] of Object.entries(vars)) {
     // Strip leading $ (SCSS) and leading -- (custom var-style SCSS names like $--primary)
     const k = rawK.replace(/^\$/, '').replace(/^--+/, '');
     const v = rawV.replace(/^var\(--[^)]+\)/, '').trim() || rawV.trim();
-    // Reject quoted strings (filenames, font lists handled separately) — they're never color/spacing tokens.
+    // Reject quoted strings (filenames) and computed/helper values
     if (/^['"]/.test(v) && !/^(['"])([^'"]+,\s*)+/.test(v)) continue;
-    // colors — name AND value must look like a color
-    if (/^(color|primary|secondary|accent|danger|warning|success|info|brand|bg|background|foreground|fg|text|muted|border)/.test(k)
+    if (COMPUTED_VAL_RE.test(v)) continue;
+    if (isRgbHelper(k, v)) continue;
+    // Skip math/percent-only values (e.g., --hue: 193deg, --light: 76%) — not useful as design tokens
+    if (/^(deg|%|\d+(\.\d+)?(deg|%))$/.test(v)) continue;
+    if (/^-?\d+\.?\d*deg$/.test(v) || /^-?\d+\.?\d*%$/.test(v)) continue;
+
+    // colors — match wider name patterns (incl. theme-colorN and surface) AND require color-like value
+    if (/^(color|primary|secondary|accent|danger|warning|success|info|brand|bg|background|foreground|fg|text|muted|border|theme-color\d+|surface|on-surface)/.test(k)
         && COLOR_VALUE_RE.test(v)) {
-      let key = k.replace(/^color-/, '').replace(/^bg-?/, 'background').replace(/^fg-?/, 'foreground').replace(/^text-?/, 'foreground');
+      let key = k.replace(/^color-/, '').replace(/^bg-?$/, 'background').replace(/^fg-?$/, 'foreground').replace(/^text$/, 'foreground');
       if (key === '' || key === 'background-color') key = 'background';
       colors[key] = v;
-    } else if (/^(space|spacing|gap|margin|padding)-/.test(k)) {
+    } else if (/^(space|spacing|gap|margin|padding)-/.test(k) && /^-?\d/.test(v)) {
       const key = k.replace(/^(space|spacing|gap|margin|padding)-/, '');
       spacing[key] = v;
-    } else if (/^(radius|border-radius|rounded)/.test(k)) {
-      const key = k.replace(/^(radius|border-radius|rounded)-?/, '') || 'md';
-      radii[key] = v;
+    } else if (/^(radius|border-radius|rounded|common-radius)/.test(k) && /^-?\d/.test(v)) {
+      // Accept canonical names + a "common"/"default" alias mapped to md.
+      const stripped = k.replace(/^(common-radius|radius|border-radius|rounded)-?/, '') || 'md';
+      const canonical = /^(sm|md|lg|xl|2xl|3xl|none|full|default)$/.test(stripped) || stripped === '';
+      if (canonical) radii[stripped === '' || stripped === 'default' ? 'md' : stripped] = v;
     } else if (/^font-?(family-)?(sans|mono|serif|body|heading)/.test(k)) {
       const m = /^font-?(family-)?(sans|mono|serif|body|heading)/.exec(k);
       if (m && m[2] === 'mono') typography.fontMono = v;

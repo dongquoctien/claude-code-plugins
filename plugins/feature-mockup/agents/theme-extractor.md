@@ -36,6 +36,15 @@ Pick the highest-priority source that exists:
 
 If the script exits non-zero, READ ITS STDERR — it will tell you what's wrong (e.g., "no recognized token source"). Do not silently swallow errors.
 
+### Multi-source merge (when both CSS and SCSS sources exist)
+
+Real-world admin systems (oh-admin, etc.) often ship BOTH a compiled `*-theme.css` (full palette including `--theme-color1..11`) AND a `base-theme.scss` (sizing tokens like `--common-radius: 3px`, `$--xs: 24px`). When the dev's export `manifest.json` mentions both, run the script twice and merge:
+
+1. CSS-vars output → wins for `colors` (richest palette, includes neutrals + semantic colors)
+2. SCSS-vars output → wins for `radii`, `spacing`, sizing aliases (because `--common-radius` lives there)
+
+Use shallow merge per category, not whole-file. The final `tokens.json` should contain every distinct color from CSS plus the radius/sizing values from SCSS.
+
 The script's output `tokens.json` follows this canonical shape:
 
 ```json
@@ -52,31 +61,92 @@ Missing keys are filled with sensible defaults so prototypes never break.
 
 ## Step 3 — Generate `theme.css`
 
-Write `{outputDir}/theme.css` with a single `:root` block:
+Write `{outputDir}/theme.css` — NOT just a `:root` block, but a **full component stylesheet** that overrides the html-tailwind template's defaults. The prototype-builder will link it AFTER the template's inline `<style>` so it wins.
+
+The file must include these sections:
+
+### 3a. CSS variables (`:root`)
+
+Map the canonical token shape to the variable names the template uses:
 
 ```css
 :root {
-  --color-bg: var(--imported-bg, #ffffff);
-  --color-fg: var(--imported-fg, #0f172a);
-  --color-muted: <muted>;
-  --color-border: <border>;
-  --color-accent: <accent or primary>;
-  --color-accent-fg: <inverse-of-accent — pick white or black for contrast>;
-  --color-danger: <danger>;
-  --color-success: <success>;
-  --radius: <radii.md>;
+  --color-primary:   <colors.primary>;
+  --color-primary-rgb: <r,g,b — derived>;
+  --color-primary-darken: <hsl darkened by 10%>;
+  --color-bg:        <colors.background>;
+  --color-bg-elevated: #ffffff;
+  --color-fg:        <colors.foreground>;
+  --color-fg-muted:  <colors.muted>;
+  --color-border:    <colors.border>;
+  --color-success:   <colors.success>;
+  --color-danger:    <colors.danger>;
+  --color-info:      <colors.info, fallback to a purple>;
+  --color-warning:   <colors.warning>;
+  --color-secondary: <colors.secondary>;
+
+  /* Sidebar / dark surface — extract from theme-color2 if available, else default to #333 */
+  --color-sidebar-bg: <theme-color2 or #333>;
+  --color-sidebar-fg: <theme-color11 or #fff>;
+
+  /* Sizing aliases — admin systems often define button heights as $--xs, $--md, etc. */
+  --h-xs: <24px from oh-admin's $--xs, fallback 28px>;
+  --h-sm: 32px;
+  --h-md: 38px;
+  --h-lg: 50px;
+
+  --radius: <radii.md — CRITICAL: respect tight values like 3px>;
   --radius-sm: <radii.sm>;
   --radius-lg: <radii.lg>;
+
+  /* Admin-density font sizes */
+  --font-size-xs:  0.75rem;
+  --font-size-sm:  0.8125rem;
+  --font-size-base:0.875rem;
+
   --font-sans: <typography.fontSans>;
-  /* spacing */
-  --space-xs: <spacing.xs>;
-  --space-sm: <spacing.sm>;
-  --space-md: <spacing.md>;
-  --space-lg: <spacing.lg>;
 }
 ```
 
-Use `tokens.json` directly. Do not duplicate logic — read the JSON, write the CSS. No defaults inline; if a token is missing in the JSON, the script's normalization step already filled it.
+### 3b. Web-font import
+
+If `typography.fontSans` mentions a non-system font (Pretendard, Inter, Roboto, Manrope…), prepend a `@import url(...)` from a CDN at the very top of `theme.css`. Common CDNs:
+- Pretendard: `https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css`
+- Inter / Roboto / Manrope: `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap`
+
+### 3c. Component overrides
+
+Write CSS rules that override the template's defaults so prototypes inherit the real product's density and feel:
+
+- `.btn-primary`, `.btn-ghost`, `.btn-danger` — use `--h-xs` for height (24px in oh-admin, NOT 40px Tailwind default), `--radius` (3px in oh-admin), correct colors. Include `:hover` state with `--color-primary-darken`.
+- `.card` — `border: 1px solid var(--color-border)`, `border-radius: var(--radius)`, padding 20px (not 1.25rem).
+- Form inputs (`input`, `select`, `textarea`, `.field-input`) — height `var(--h-xs)`, font-size `var(--font-size-xs)`, border-color on focus uses `--color-primary`.
+- `.k-grid` — Kendo-style table for admin systems with Kendo: header bg `#f2f2f2`, cell padding `6px 10px`, hover row `#f9f9f9`, `font-size: var(--font-size-xs)`.
+- `.badge`, `.badge-success`, `.badge-danger`, `.badge-info`, `.badge-muted` — small pill, font-size `var(--font-size-xxs)`, padding `2px 8px`.
+- `.page-sidebar` — `width: 215px` (or detected sidebar width), bg `var(--color-sidebar-bg)`, fg `var(--color-sidebar-fg)`, full height.
+- `.page-logo` — `height: 50px`, bg `var(--color-primary)`, contains brand name.
+- `.page-header` — `height: 50px`, bg white, border-bottom 1px, holds breadcrumb + actions.
+- `.nav-menu` — vertical menu with hover/active states using `--color-sidebar-active-bg: rgba(0,0,0,.2)`.
+
+Read `source-manifest.json` `stack.uiLib` — when it's `kendo`, definitely include `.k-grid`. When it's `material`, use Material Design density instead.
+
+### 3d. Layout helpers
+
+Include a small set of layout utilities since prototypes won't have Tailwind in the real-system branch:
+
+```css
+.layout { display: flex; min-height: 100vh; }
+.main   { display: flex; flex-direction: column; flex: 1; }
+.toolbar { display: flex; gap: 8px; align-items: center; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.text-xs { font-size: var(--font-size-xs); }
+.text-muted { color: var(--color-fg-muted); }
+.flex { display: flex; } .items-center { align-items: center; } .gap-2 { gap: 8px; }
+.ml-auto { margin-left: auto; } .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; } .mt-4 { margin-top: 16px; }
+```
+
+These mirror common Tailwind utilities so screen markup can use them without a Tailwind build.
 
 ## Step 4 — Clone components (if present)
 
