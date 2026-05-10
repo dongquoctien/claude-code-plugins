@@ -24,12 +24,20 @@ function arg(name, fallback) {
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './events-detection.json'));
-const SRC = arg('--src', 'src');
+const SRC_RAW = arg('--src', 'src');
+const SRC_LIST = SRC_RAW.split(',').map(s => s.trim()).filter(Boolean);
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+// Auto-include app/ for Remix
+if (!SRC_LIST.includes('app') && fs.existsSync(path.join(ROOT, 'app/routes'))) {
+  SRC_LIST.push('app');
+}
+
+const validSrc = SRC_LIST.filter(s => fs.existsSync(path.join(ROOT, s)));
+if (validSrc.length === 0) {
+  console.error('source dir not found. Tried:', SRC_LIST.join(', '));
   process.exit(1);
 }
+const SRC = validSrc[0];
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', 'out', '.git', 'coverage', '.angular']);
 function* walk(dir) {
@@ -46,8 +54,32 @@ function* walk(dir) {
 
 const rel = p => path.relative(ROOT, p).replace(/\\/g, '/');
 function routeOf(p) {
-  const m = p.match(/[\\/]routes[\\/]([^\\/]+)[\\/]/);
-  return m ? m[1] : null;
+  const norm = p.replace(/\\/g, '/');
+  // Angular: /routes/<feature>/...
+  let m = norm.match(/\/routes\/([^/]+)\//);
+  if (m) return m[1];
+  // Astro: /src/pages/<segment>/... or /src/pages/<segment>.astro
+  m = norm.match(/\/src\/pages\/([^/.]+)/);
+  if (m && m[1] !== 'index') return m[1];
+  // Gatsby: /src/pages/<segment>/... or /src/pages/<segment>.tsx
+  if (norm.includes('/src/pages/')) {
+    const after = norm.split('/src/pages/')[1];
+    const seg = after.split('/')[0].split('.')[0];
+    if (seg && seg !== 'index') return seg;
+  }
+  // Remix v2 flat: /app/routes/<segment>.<...>.tsx
+  m = norm.match(/\/app\/routes\/([^/.]+)/);
+  if (m && !m[1].startsWith('_')) return m[1];
+  // Vue/Nuxt: /pages/<segment>/...
+  m = norm.match(/\/pages\/([^/.]+)/);
+  if (m && m[1] !== 'index') return m[1];
+  // Next.js App Router: /app/<segment>/page.tsx
+  m = norm.match(/\/app\/([^/]+)\/(page|layout|loading|error)\.(tsx|jsx|ts|js)/);
+  if (m && !m[1].startsWith('(') && !m[1].startsWith('_')) return m[1];
+  // SvelteKit: /src/routes/<segment>/+page.svelte
+  m = norm.match(/\/src\/routes\/([^/]+)\//);
+  if (m) return m[1];
+  return null;
 }
 
 // ─── Action signature regexes ─────────────────────────────────────────
@@ -165,24 +197,42 @@ function scanMethodBody(body, methodName, file, framework) {
 
 let scanned = 0;
 const SCAN_LIMIT = 5000;
-const SRC_ROOT = path.join(ROOT, SRC);
 
-for (const file of walk(SRC_ROOT)) {
+// Walk every src dir (e.g. ['src', 'app'] for Remix projects)
+function* walkAll() {
+  for (const s of validSrc) yield* walk(path.join(ROOT, s));
+}
+
+const SRC_ROOT = path.join(ROOT, SRC); // primary, kept for backwards compat references
+
+// Astro page <script> in frontmatter — detect handlers exported or local in <script> setup-like
+const ASTRO_FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---/;
+// Remix loader/action — `export async function loader(...)` or `export const action = async (...)`
+const REMIX_LOADER_ACTION_RE = /export\s+(?:async\s+)?(?:function|const)\s+(loader|action|clientLoader|clientAction)\b[\s\S]{0,500}?\{([\s\S]{0,4000}?)\}/g;
+
+for (const file of walkAll()) {
   if (scanned >= SCAN_LIMIT) break;
   const ext = path.extname(file).toLowerCase();
-  if (!['.ts', '.tsx', '.jsx', '.js', '.html', '.vue', '.svelte'].includes(ext)) continue;
+  if (!['.ts', '.tsx', '.jsx', '.js', '.html', '.vue', '.svelte', '.astro'].includes(ext)) continue;
   scanned++;
 
   let content = '';
   try { content = fs.readFileSync(file, 'utf8'); } catch { continue; }
   if (content.length > 200000) content = content.slice(0, 200000);
 
+  const norm = file.replace(/\\/g, '/');
+  const isRemixRoute = /\/app\/routes\//.test(norm) && /\.(tsx|jsx|ts|js)$/.test(file);
+  const isGatsbyPage = /\/src\/pages\//.test(norm) && /\.(tsx|jsx)$/.test(file);
+
   // Detect framework from extension + content
   let framework = 'unknown';
-  if (ext === '.vue') framework = 'vue';
+  if (ext === '.astro') framework = 'astro';
+  else if (ext === '.vue') framework = 'vue';
   else if (ext === '.svelte') framework = 'svelte';
   else if (/\.component\.ts$/.test(file)) framework = 'angular';
   else if (/\.component\.html$/.test(file)) framework = 'angular';
+  else if (isRemixRoute) framework = 'remix';
+  else if (isGatsbyPage) framework = 'gatsby';
   else if (ext === '.tsx' || ext === '.jsx') framework = 'react';
   else if (ext === '.ts' || ext === '.js') framework = /Component|@Component|@Injectable/.test(content) ? 'angular' : 'js';
 
@@ -209,12 +259,48 @@ for (const file of walk(SRC_ROOT)) {
       if (body && body.length >= 10) scanMethodBody(body, methodName, file, 'vue');
     }
   }
-  if (framework === 'react' || ext === '.tsx' || ext === '.jsx') {
+  if ((framework === 'react' || framework === 'remix' || framework === 'gatsby') || ext === '.tsx' || ext === '.jsx') {
     for (const m of content.matchAll(REACT_FN_RE)) {
       const methodName = m[1];
       const body = m[3];
       if (KEYWORDS.has(methodName)) continue;
-      if (body && body.length >= 10) scanMethodBody(body, methodName, file, 'react');
+      if (body && body.length >= 10) scanMethodBody(body, methodName, file, framework === 'unknown' ? 'react' : framework);
+    }
+  }
+
+  // Astro frontmatter — JS expressions inside --- ... --- block at top of file
+  // Plus inline <script> blocks and <script is:inline>
+  if (framework === 'astro' && ext === '.astro') {
+    const fmMatch = content.match(ASTRO_FRONTMATTER_RE);
+    if (fmMatch) {
+      const fm = fmMatch[1];
+      // Treat top-level const/function declarations as handlers (rare in Astro;
+      // most pages just compute data — but action-style helpers do appear)
+      for (const m of fm.matchAll(/(?:const|function)\s+(\w+)\s*=?\s*(?:async\s*)?\(([^)]*)\)\s*(?:=>\s*)?\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)) {
+        const methodName = m[1];
+        const body = m[3];
+        if (KEYWORDS.has(methodName)) continue;
+        if (body && body.length >= 10) scanMethodBody(body, methodName, file, 'astro');
+      }
+    }
+    // Inline <script> blocks (client-side handlers)
+    for (const sm of content.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) {
+      const scriptBody = sm[1];
+      for (const m of scriptBody.matchAll(REACT_FN_RE)) {
+        const methodName = m[1];
+        const body = m[3];
+        if (KEYWORDS.has(methodName)) continue;
+        if (body && body.length >= 10) scanMethodBody(body, methodName, file, 'astro');
+      }
+    }
+  }
+
+  // Remix loaders/actions — server-side handlers that affect UI flow
+  if (framework === 'remix') {
+    for (const m of content.matchAll(REMIX_LOADER_ACTION_RE)) {
+      const methodName = m[1]; // loader / action / clientLoader / clientAction
+      const body = m[2];
+      if (body && body.length >= 10) scanMethodBody(body, methodName, file, 'remix');
     }
   }
 
@@ -231,9 +317,19 @@ for (const file of walk(SRC_ROOT)) {
       recordTrigger(routeOf(file), m[1], m[2], file);
     }
   }
-  if (framework === 'react' && (ext === '.tsx' || ext === '.jsx')) {
+  if ((framework === 'react' || framework === 'remix' || framework === 'gatsby') && (ext === '.tsx' || ext === '.jsx')) {
     for (const m of content.matchAll(REACT_TEMPLATE_HANDLER_RE)) {
       recordTrigger(routeOf(file), m[1].toLowerCase(), m[2], file);
+    }
+  }
+  // Astro: HTML-ish in template body uses on:click attribute (Astro client directives) or plain JS
+  if (framework === 'astro' && ext === '.astro') {
+    // After frontmatter, scan markup for on:click="handler" / onclick="handler"
+    const afterFm = content.replace(ASTRO_FRONTMATTER_RE, '');
+    for (const m of afterFm.matchAll(/\bon(?:click|submit|change|input|keyup|blur|focus)="(\w+)/gi)) {
+      // m[0] like 'onclick="handler"', extract event name
+      const evName = m[0].split('=')[0].replace(/^on/i, '').toLowerCase();
+      recordTrigger(routeOf(file), evName, m[1], file);
     }
   }
 }

@@ -24,10 +24,11 @@ function arg(name, fallback) {
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './route-patterns.json'));
-const SRC = arg('--src', 'src');
+import { resolveSrcRoots, routeOf as routeOfFile } from './_lib/src-roots.mjs';
+const { roots: SRC_ROOTS, primary: SRC } = resolveSrcRoots(ROOT, arg('--src', 'src'));
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+if (!SRC) {
+  console.error('source dir not found:', path.join(ROOT, arg('--src', 'src')));
   process.exit(1);
 }
 
@@ -44,10 +45,7 @@ function* walk(dir) {
   }
 }
 
-function routeOf(p) {
-  const m = p.replace(/\\/g, '/').match(/\/routes\/([^/]+)\//);
-  return m ? m[1] : null;
-}
+const routeOf = routeOfFile;
 
 // ─── 1. Filter grid columns ──────────────────────────────────────────────
 // Parse *-search.component.html / filter-area templates for label/control
@@ -154,14 +152,17 @@ function deriveRoutePrefixGroups(routeNames) {
 const filterGrids = {};
 const cellPatterns = {};
 const routesSeen = new Set();
+function* walkAll() { for (const r of SRC_ROOTS) yield* walk(path.join(ROOT, r)); }
 
-for (const file of walk(path.join(ROOT, SRC))) {
+for (const file of walkAll()) {
   const route = routeOf(file);
   if (route) routesSeen.add(route);
 
   const isTemplate =
     file.endsWith('.component.html') ||
     file.endsWith('.vue') ||
+    file.endsWith('.svelte') ||
+    file.endsWith('.astro') ||
     /\.(tsx|jsx)$/.test(file);
   if (!isTemplate) continue;
 

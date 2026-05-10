@@ -28,7 +28,22 @@ const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 let framework = 'unknown';
 let frameworkVersion = null;
 
+// Detection order matters — more-specific frameworks first.
+// e.g. Astro/Remix/Gatsby may pull in react as a dep, so they must come BEFORE the
+// generic "deps['react']" check.
 if (exists('angular.json')) { framework = 'angular'; frameworkVersion = (deps['@angular/core'] || '').replace(/^[~^]/, ''); }
+else if (deps['astro'] || findOne('astro.config.js', 'astro.config.ts', 'astro.config.mjs', 'astro.config.cjs')) {
+  framework = 'astro';
+  frameworkVersion = (deps['astro'] || '').replace(/^[~^]/, '');
+}
+else if (deps['@remix-run/dev'] || deps['@remix-run/react'] || findOne('remix.config.js', 'remix.config.ts')) {
+  framework = 'remix';
+  frameworkVersion = (deps['@remix-run/react'] || deps['@remix-run/dev'] || '').replace(/^[~^]/, '');
+}
+else if (deps['gatsby'] || findOne('gatsby-config.js', 'gatsby-config.ts', 'gatsby-config.mjs')) {
+  framework = 'gatsby';
+  frameworkVersion = (deps['gatsby'] || '').replace(/^[~^]/, '');
+}
 else if (deps['next']) { framework = 'nextjs'; frameworkVersion = deps['next'].replace(/^[~^]/, ''); }
 else if (deps['nuxt'] || deps['nuxt3']) { framework = 'nuxt'; frameworkVersion = (deps['nuxt'] || deps['nuxt3']).replace(/^[~^]/, ''); }
 else if (deps['vue']) { framework = 'vue'; frameworkVersion = deps['vue'].replace(/^[~^]/, ''); }
@@ -47,6 +62,13 @@ const styleEntryCandidates = [
   'src/assets/styles.scss', 'src/assets/main.scss',
   'styles/globals.css', 'app/globals.css', // Next.js app router
   'src/global.css', 'src/global.scss',
+  // Astro: src/styles/global.css; layouts often link <BaseLayout>
+  'src/styles/global.css', 'src/styles/global.scss', 'src/styles/main.scss',
+  // Remix: app/styles or app/tailwind.css; root.tsx links <Links>
+  'app/tailwind.css', 'app/styles/app.css', 'app/styles/global.css',
+  'app/root.css',
+  // Gatsby: src/styles/global.css; gatsby-browser.js imports
+  'src/styles/global.css',
 ];
 const stylesEntries = styleEntryCandidates.filter(p => exists(p));
 if (stylesEntries.some(p => p.endsWith('.scss')) || deps['sass'] || deps['node-sass']) css.push('scss');
@@ -196,6 +218,12 @@ const componentDirCandidates = {
   vue:     ['src/components', 'components'],
   nuxt:    ['components', 'src/components'],
   svelte:  ['src/lib', 'src/lib/components'],
+  // Astro: components live in src/components; .astro / .tsx / .vue / .svelte all valid here
+  astro:   ['src/components', 'src/components/ui', 'src/layouts'],
+  // Remix v2: components in app/components (custom convention, no built-in)
+  remix:   ['app/components', 'app/components/ui', 'app/lib/components'],
+  // Gatsby: src/components is conventional
+  gatsby:  ['src/components', 'src/components/ui'],
   unknown: ['src/components', 'components'],
 };
 
@@ -214,20 +242,79 @@ if (tokenSourceCandidates.length === 0) {
 }
 
 // ─── Routes (admin menu source) ───────────────────────────────────────
-// For Angular admins, src/app/routes/<feature-name>/ is a strong signal of menu structure.
-// We don't fully parse routing.module.ts (too varied), but we surface the folder list so the
-// crawl-components / prototype-builder can use it to seed realistic nav items.
+// Different frameworks store routes very differently:
+//   Angular:    src/app/routes/<feature>/   (folder per feature)
+//   Next.js:    app/<segment>/page.tsx OR pages/<segment>.tsx
+//   Vue/Nuxt:   pages/<file>.vue OR src/pages/<file>.vue
+//   Svelte:     src/routes/<segment>/+page.svelte
+//   Astro:      src/pages/<file>.astro (recursive — file-based, [slug] for dynamic)
+//   Remix:      app/routes/<file>.tsx (flat with . separators, e.g. booking.$id.tsx)
+//   Gatsby:     src/pages/<file>.tsx + createPages programmatic
 let routesDir = null;
-const routeDirCandidates = ['src/app/routes', 'src/app/pages', 'src/views', 'src/pages', 'app/routes'];
-for (const rd of routeDirCandidates) {
+const routeDirCandidates = {
+  angular:  ['src/app/routes', 'src/app/pages'],
+  nextjs:   ['app', 'pages', 'src/app', 'src/pages'],
+  nuxt:     ['pages', 'src/pages', 'app/pages'],
+  vue:      ['src/views', 'src/pages', 'pages'],
+  react:    ['src/views', 'src/pages', 'src/routes'],
+  svelte:   ['src/routes'],
+  astro:    ['src/pages'],
+  remix:    ['app/routes'],
+  gatsby:   ['src/pages'],
+  unknown:  ['src/app/routes', 'src/views', 'src/pages', 'pages', 'app/routes'],
+};
+for (const rd of routeDirCandidates[framework] || routeDirCandidates.unknown) {
   if (exists(rd) && fs.statSync(path.join(ROOT, rd)).isDirectory()) { routesDir = rd; break; }
 }
+
 let routes = [];
 if (routesDir) {
   try {
-    routes = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true })
-      .filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'))
-      .map(e => e.name);
+    if (framework === 'astro') {
+      // Astro: src/pages/**/*.astro, but also nested folders. Treat each
+      // top-level page file (without extension) as a route name. For nested
+      // folders, treat the folder as the route.
+      const entries = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true });
+      for (const e of entries) {
+        if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+        if (e.isDirectory()) routes.push(e.name);
+        else if (e.isFile() && /\.(astro|md|mdx)$/.test(e.name) && !e.name.startsWith('index.')) {
+          routes.push(e.name.replace(/\.(astro|md|mdx)$/, ''));
+        }
+      }
+    } else if (framework === 'remix') {
+      // Remix v2 flat: e.g. "booking._index.tsx", "booking.$id.tsx", "_index.tsx"
+      // The route name is the segment before the first '.' (or the whole filename if no '.')
+      const entries = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true });
+      const seenSegments = new Set();
+      for (const e of entries) {
+        if (e.name.startsWith('.') || e.name.startsWith('_index')) continue;
+        if (e.isFile() && /\.(tsx|jsx|ts|js)$/.test(e.name)) {
+          const stem = e.name.replace(/\.(tsx|jsx|ts|js)$/, '');
+          const topSegment = stem.split('.')[0];
+          if (topSegment && !topSegment.startsWith('_')) seenSegments.add(topSegment);
+        } else if (e.isDirectory() && !e.name.startsWith('_')) {
+          seenSegments.add(e.name);
+        }
+      }
+      routes = [...seenSegments];
+    } else if (framework === 'gatsby') {
+      // Gatsby: src/pages/<file>.tsx (file-based) + may have programmatic via gatsby-node.js
+      const entries = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true });
+      for (const e of entries) {
+        if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+        if (e.isDirectory()) routes.push(e.name);
+        else if (e.isFile() && /\.(tsx|jsx|ts|js|md|mdx)$/.test(e.name) && !e.name.startsWith('index.')) {
+          routes.push(e.name.replace(/\.(tsx|jsx|ts|js|md|mdx)$/, ''));
+        }
+      }
+    } else {
+      // Default behavior: each direct subdirectory is a route name
+      // (Angular convention; also acceptable for Next/Nuxt/Vue/Svelte).
+      routes = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true })
+        .filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && !e.name.startsWith('('))
+        .map(e => e.name);
+    }
   } catch {}
 }
 

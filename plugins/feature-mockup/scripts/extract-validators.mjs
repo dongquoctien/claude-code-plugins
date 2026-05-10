@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveSrcRoots, routeOf as routeOfFile } from './_lib/src-roots.mjs';
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -13,10 +14,10 @@ function arg(name, fallback) {
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './validators-detection.json'));
-const SRC = arg('--src', 'src');
+const { roots: SRC_ROOTS, primary: SRC } = resolveSrcRoots(ROOT, arg('--src', 'src'));
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+if (!SRC) {
+  console.error('source dir not found:', path.join(ROOT, arg('--src', 'src')));
   process.exit(1);
 }
 
@@ -35,10 +36,8 @@ function* walk(dir) {
 
 const rel = p => path.relative(ROOT, p).replace(/\\/g, '/');
 
-function routeOf(p) {
-  const m = p.match(/[\\/]routes[\\/]([^\\/]+)[\\/]/);
-  return m ? m[1] : null;
-}
+// Use shared multi-framework router resolver
+const routeOf = routeOfFile;
 
 // Match Angular reactive form patterns:
 //   email: ['', [Validators.required, Validators.email]],
@@ -62,9 +61,12 @@ const validatorsByRoute = {};
 let scannedTs = 0, scannedHtml = 0;
 const SCAN_LIMIT = 5000;
 
-for (const file of walk(path.join(ROOT, SRC))) {
+function* walkAll() { for (const r of SRC_ROOTS) yield* walk(path.join(ROOT, r)); }
+
+for (const file of walkAll()) {
   const ext = path.extname(file).toLowerCase();
-  if (!['.ts', '.tsx', '.html'].includes(ext)) continue;
+  // Add .jsx + .vue + .svelte + .astro so framework-specific schemas are caught too
+  if (!['.ts', '.tsx', '.jsx', '.html', '.vue', '.svelte', '.astro'].includes(ext)) continue;
   if (scannedTs + scannedHtml >= SCAN_LIMIT) break;
 
   let content = '';

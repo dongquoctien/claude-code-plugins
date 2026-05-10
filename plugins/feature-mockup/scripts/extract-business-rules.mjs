@@ -23,10 +23,11 @@ function arg(name, fallback) {
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './business-rules.json'));
-const SRC = arg('--src', 'src');
+import { resolveSrcRoots, routeOf as routeOfFile } from './_lib/src-roots.mjs';
+const { roots: SRC_ROOTS, primary: SRC } = resolveSrcRoots(ROOT, arg('--src', 'src'));
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+if (!SRC) {
+  console.error('source dir not found:', path.join(ROOT, arg('--src', 'src')));
   process.exit(1);
 }
 
@@ -44,10 +45,7 @@ function* walk(dir) {
 }
 
 const rel = p => path.relative(ROOT, p).replace(/\\/g, '/');
-function routeOf(p) {
-  const m = p.match(/[\\/]routes[\\/]([^\\/]+)[\\/]/);
-  return m ? m[1] : null;
-}
+const routeOf = routeOfFile;
 
 const rulesByRoute = {};
 
@@ -99,11 +97,12 @@ const CONDITIONAL_DISABLE_RE = /(\[?(?:disabled|hidden|readonly)\]?|:disabled|:h
 let scanned = 0;
 const SCAN_LIMIT = 5000;
 const SRC_ROOT = path.join(ROOT, SRC);
+function* walkAll() { for (const r of SRC_ROOTS) yield* walk(path.join(ROOT, r)); }
 
-for (const file of walk(SRC_ROOT)) {
+for (const file of walkAll()) {
   if (scanned >= SCAN_LIMIT) break;
   const ext = path.extname(file).toLowerCase();
-  if (!['.ts', '.tsx', '.jsx', '.js', '.html', '.vue', '.svelte'].includes(ext)) continue;
+  if (!['.ts', '.tsx', '.jsx', '.js', '.html', '.vue', '.svelte', '.astro'].includes(ext)) continue;
   scanned++;
 
   let content = '';

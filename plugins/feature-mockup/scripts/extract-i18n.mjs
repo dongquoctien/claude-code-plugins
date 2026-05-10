@@ -28,12 +28,25 @@ const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './i18n.json'));
 
 const I18N_DIR_CANDIDATES = [
+  // Angular ngx-translate convention
   'src/assets/i18n',
   'src/assets/locales',
+  // Vue / React
   'src/i18n',
   'src/locales',
+  // Next.js next-intl / next-i18next
   'public/locales',
   'public/i18n',
+  'messages',         // next-intl convention
+  'i18n',             // some Next.js variants
+  // Astro: astro-i18next stores locales in src/i18n or src/locales
+  'src/i18n/locales',
+  // Remix: app/locales (custom) or public/locales (when using remix-i18next)
+  'app/locales',
+  // SvelteKit + svelte-i18n: src/lib/i18n/locales
+  'src/lib/i18n',
+  'src/lib/i18n/locales',
+  // Gatsby: gatsby-plugin-react-i18next puts locales in static/locales
   'static/locales',
   'assets/i18n',
 ];

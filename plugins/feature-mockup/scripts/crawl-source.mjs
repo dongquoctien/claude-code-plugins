@@ -19,16 +19,35 @@ function flag(name) { return process.argv.includes(name); }
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './source-copy'));
-const SRC = arg('--src', 'src');
+// SRC may be a comma-separated list of source roots (e.g. "src,app" for Remix
+// projects which split between src/components and app/routes).
+const SRC_RAW = arg('--src', 'src');
+const SRC_LIST = SRC_RAW.split(',').map(s => s.trim()).filter(Boolean);
+
+// Auto-add app/ when present (Remix, Next.js App Router) so we don't miss routes.
+if (!SRC_LIST.includes('app') && fs.existsSync(path.join(ROOT, 'app'))) {
+  // Heuristic: include app/ if it contains routes/ (Remix) or any *.tsx file
+  try {
+    const appHasRoutes = fs.existsSync(path.join(ROOT, 'app/routes')) ||
+                         fs.existsSync(path.join(ROOT, 'app/root.tsx')) ||
+                         fs.existsSync(path.join(ROOT, 'app/root.jsx'));
+    if (appHasRoutes) SRC_LIST.push('app');
+  } catch {}
+}
+
 const MAX_BYTES = Number(arg('--max-bytes', String(20 * 1024 * 1024)));  // 20MB
 const INCLUDE_SERVICES = !flag('--no-services');
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+const validSrcDirs = SRC_LIST.filter(s => fs.existsSync(path.join(ROOT, s)));
+if (validSrcDirs.length === 0) {
+  console.error('source dir not found. Tried:', SRC_LIST.map(s => path.join(ROOT, s)).join(', '));
   process.exit(1);
 }
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', 'out', '.git', 'coverage', '.angular', '.cache']);
+// Backwards compat: SRC variable still references the first dir (for paths in manifest)
+const SRC = validSrcDirs[0];
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', 'out', '.git', 'coverage', '.angular', '.cache', 'public', 'static']);
 const SKIP_FILE_RE = /\.(spec|test|stories|story|d|map)\.(ts|tsx|js|jsx|html)$/i;
 
 function* walk(dir) {
@@ -67,6 +86,22 @@ function classify(absPath) {
   if (/\.vue$/.test(base)) return 'vue-sfc';
   // Svelte
   if (/\.svelte$/.test(base)) return 'svelte-sfc';
+  // Astro
+  if (/\.astro$/.test(base)) {
+    if (/[\\/]layouts[\\/]/.test(rel)) return 'astro-layout';
+    if (/[\\/]pages[\\/]/.test(rel)) return 'astro-page';
+    return 'astro-component';
+  }
+  // Remix v2 — flat routes in app/routes/
+  if (/[\\/]app[\\/]routes[\\/]/.test(rel) && /\.(tsx|jsx)$/.test(base)) return 'remix-route';
+  // Remix root + entry files
+  if (/[\\/]app[\\/]root\.(tsx|jsx)$/.test(rel)) return 'remix-root';
+  // Remix server modules — loaders/actions live in route files but can be standalone
+  if (/[\\/]app[\\/].+\.server\.(ts|js)$/.test(rel) && INCLUDE_SERVICES) return 'remix-server';
+  // Gatsby — pages in src/pages/, gatsby-{node,browser,ssr,config}.js are configuration
+  if (/[\\/]src[\\/]pages[\\/]/.test(rel) && /\.(tsx|jsx)$/.test(base)) return 'gatsby-page';
+  if (/[\\/]src[\\/]templates[\\/]/.test(rel) && /\.(tsx|jsx)$/.test(base)) return 'gatsby-template';
+  if (/^gatsby-(node|browser|ssr|config)\.(js|ts|mjs)$/.test(base)) return 'gatsby-config';
   // React (PascalCase tsx/jsx — likely components)
   if (/\.(tsx|jsx)$/.test(base) && /^[A-Z]/.test(base.replace(/\.(tsx|jsx)$/, ''))) return 'react-component';
   // Index files often re-export
@@ -77,14 +112,17 @@ function classify(absPath) {
   return null;
 }
 
-const SRC_ROOT = path.join(ROOT, SRC);
+const SRC_ROOT = path.join(ROOT, SRC); // primary src root (for backwards-compat paths)
 const candidates = [];
-for (const file of walk(SRC_ROOT)) {
-  const kind = classify(file);
-  if (!kind) continue;
-  let size = 0;
-  try { size = fs.statSync(file).size; } catch { continue; }
-  candidates.push({ file, kind, size });
+for (const srcDir of validSrcDirs) {
+  const root = path.join(ROOT, srcDir);
+  for (const file of walk(root)) {
+    const kind = classify(file);
+    if (!kind) continue;
+    let size = 0;
+    try { size = fs.statSync(file).size; } catch { continue; }
+    candidates.push({ file, kind, size });
+  }
 }
 
 // Sort smallest first so under-budget items always get copied; cap by category quotas

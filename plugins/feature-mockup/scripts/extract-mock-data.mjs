@@ -16,11 +16,12 @@ function arg(name, fallback) {
 
 const ROOT = path.resolve(arg('--in', '.'));
 const OUT = path.resolve(arg('--out', './mock-data-detection.json'));
-const SRC = arg('--src', 'src');
+import { resolveSrcRoots, routeOf as routeOfFile } from './_lib/src-roots.mjs';
+const { roots: SRC_ROOTS, primary: SRC } = resolveSrcRoots(ROOT, arg('--src', 'src'));
 const MAX_RECORDS_PER_ARRAY = Number(arg('--max-records', '20'));
 
-if (!fs.existsSync(path.join(ROOT, SRC))) {
-  console.error('source dir not found:', path.join(ROOT, SRC));
+if (!SRC) {
+  console.error('source dir not found:', path.join(ROOT, arg('--src', 'src')));
   process.exit(1);
 }
 
@@ -38,10 +39,7 @@ function* walk(dir) {
 }
 
 const rel = p => path.relative(ROOT, p).replace(/\\/g, '/');
-function routeOf(p) {
-  const m = p.match(/[\\/]routes[\\/]([^\\/]+)[\\/]/);
-  return m ? m[1] : null;
-}
+const routeOf = routeOfFile;
 
 // Match named exports of arrays of objects:
 //   export const foo = [ { ... }, { ... } ];
@@ -76,10 +74,12 @@ function tryParseLiteralArray(text) {
 const dataByRoute = {};
 let scanned = 0;
 const SCAN_LIMIT = 4000;
+function* walkAll() { for (const r of SRC_ROOTS) yield* walk(path.join(ROOT, r)); }
 
-for (const file of walk(path.join(ROOT, SRC))) {
+for (const file of walkAll()) {
   const ext = path.extname(file).toLowerCase();
-  if (!['.ts', '.tsx'].includes(ext)) continue;
+  // .jsx for Remix/Gatsby/Astro mock arrays in service-like helpers
+  if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) continue;
   if (scanned >= SCAN_LIMIT) break;
   scanned++;
 

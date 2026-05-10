@@ -55,6 +55,9 @@ Before generating any prototype HTML, read the stack knowledge file matching `ma
 | `nextjs` | `{pluginRoot}/knowledge/nextjs.md` |
 | `vue` or `nuxt` | `{pluginRoot}/knowledge/vue.md` |
 | `svelte` or `sveltekit` | `{pluginRoot}/knowledge/svelte.md` |
+| `astro` | `{pluginRoot}/knowledge/astro.md` |
+| `remix` | `{pluginRoot}/knowledge/remix.md` |
+| `gatsby` | `{pluginRoot}/knowledge/gatsby.md` |
 | Other | Skip — fall back to generic patterns from this file |
 
 These knowledge files contain framework-specific quirks: how styles flow at build, what selectors to strip (`_ngcontent`, `[data-v-...]`, `::ng-deep`, `:host`), how to translate framework template syntax (`*ngFor`, `v-for`, `{children}`) to static HTML, what imports to drop (`next/image`, `next/link`, `vue-router`), and which UI library conventions to mirror (Kendo classes, shadcn variants, Vuetify selectors).
