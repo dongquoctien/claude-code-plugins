@@ -77,16 +77,30 @@ if (tw) tokenSourceCandidates.push({ type: 'tailwind', path: tw });
 const tokens = findOne('tokens.json', 'design-tokens.json', 'src/tokens.json', 'src/design-tokens.json');
 if (tokens) tokenSourceCandidates.push({ type: 'tokens-json', path: tokens });
 
-// SCSS variables file (look for $color- patterns)
+// SCSS variables file — pick the one that actually contains $variables, not just the first existing.
 const scssVarFiles = [
-  'src/styles.scss', 'src/styles/_variables.scss', 'src/styles/variables.scss',
+  'src/styles/_variables.scss', 'src/styles/variables.scss',
   'src/scss/_variables.scss', 'src/scss/variables.scss',
   'src/assets/scss/_variables.scss', 'src/assets/scss/variables.scss',
   'src/assets/scss/base-theme.scss', 'src/assets/scss/_theme.scss',
   'src/assets/styles/_variables.scss', 'src/theme.scss',
+  'src/styles.scss',
 ];
-const scssVar = scssVarFiles.find(p => exists(p));
-if (scssVar) tokenSourceCandidates.push({ type: 'scss-vars', path: scssVar });
+const SCSS_VAR_RE = /^\s*\$[\w-]+\s*:/m;
+const scssVarsScored = scssVarFiles
+  .filter(p => exists(p))
+  .map(p => {
+    let score = 0;
+    try {
+      const content = fs.readFileSync(path.join(ROOT, p), 'utf8');
+      const matches = content.match(/^\s*\$[\w-]+\s*:/gm);
+      score = matches ? matches.length : 0;
+    } catch {}
+    return { path: p, score };
+  })
+  .filter(c => c.score > 0)
+  .sort((a, b) => b.score - a.score);
+if (scssVarsScored[0]) tokenSourceCandidates.push({ type: 'scss-vars', path: scssVarsScored[0].path });
 
 // CSS variables (fallback)
 const cssVarFiles = stylesEntries.filter(p => p.endsWith('.css'));
