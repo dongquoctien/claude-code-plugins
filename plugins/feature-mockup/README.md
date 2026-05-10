@@ -24,15 +24,28 @@ Most planning tools stop at a spec. By the time devs read it, the BA has already
 
 ## Quick start
 
+### For developers (one-time, when shipping a design system update)
+
+```bash
+# Run from inside your front-end project root (where package.json or angular.json lives)
+cd D:/Code/oh-admin
+/feature-mockup:extract-design
+
+# A wizard walks through stack detection, style sources, and component selection,
+# then writes ./fe-design-export.zip. Hand that zip to your BA.
+```
+
+### For BAs
+
 ```bash
 # 1. Set up once per project
 /feature-mockup:init
 
-# 2. Make your first prototype
-/feature-mockup:make "booking-cancel-flow" ./screenshots/cancel-1.png ./refs/policy.md
+# 2. (Optional, but highly recommended) Import the dev's design export
+/feature-mockup:ingest-theme ./from-dev/fe-design-export.zip
 
-# 3. (Phase 2) Import the real front-end design once devs export it
-/feature-mockup:ingest-theme ./from-dev/theme-export.zip
+# 3. Make your first prototype — text + screenshots + docs in any combination
+/feature-mockup:make "booking-cancel-flow" ./screenshots/cancel-1.png ./refs/policy.md
 
 # 4. (Phase 3) Open the result in a browser
 /feature-mockup:preview "booking-cancel-flow"
@@ -58,12 +71,13 @@ Most planning tools stop at a spec. By the time devs read it, the BA has already
 
 ## Skills
 
-| Skill | Status | Purpose |
+| Skill | Audience | Purpose |
 |---|---|---|
-| `/feature-mockup:init` | Phase 1 | Initialize `.claude/feature-mockup.json` |
-| `/feature-mockup:make` | Phase 1 | Generate a prototype from inputs |
-| `/feature-mockup:ingest-theme` | Phase 2 | Import the team's real FE design (tokens + components) |
-| `/feature-mockup:preview` | Phase 3 | Open the generated prototype in a browser |
+| `/feature-mockup:init` | BA | Initialize `.claude/feature-mockup.json` per project |
+| `/feature-mockup:make` | BA | Generate a prototype from a description + screenshots/docs |
+| `/feature-mockup:extract-design` | **Dev** | Crawl the front-end source and produce a zip for the BA (auto-detects Angular/React/Vue/Next) |
+| `/feature-mockup:ingest-theme` | BA | Import the dev's zip — tokens + component vocabulary |
+| `/feature-mockup:preview` | BA | Open the generated prototype in a browser (Phase 3) |
 
 ## What devs need to export (for `ingest-theme`, Phase 2)
 
@@ -77,8 +91,9 @@ Full spec: see `docs/fe-export-spec.md` (Phase 2).
 
 ## Status
 
-- **Phase 1 (shipped):** `init`, `make`, `html-tailwind` template, `input-analyzer` + `prototype-builder` agents.
-- **Phase 2 (shipped):** `ingest-theme` skill, `theme-extractor` agent, normalized tokens pipeline, component cloning with import rewriting, `docs/fe-export-spec.md` for devs.
+- **Phase 1 (shipped):** `init`, `make`, `html-tailwind` template, `input-analyzer` + `prototype-builder` agents. Lucide icons, no emoji.
+- **Phase 2 (shipped):** `ingest-theme` skill, `theme-extractor` agent, normalized tokens pipeline, component cloning with import rewriting, `docs/fe-export-spec.md`.
+- **Phase 2.5 (shipped):** `extract-design` skill (dev-side), `design-extractor` agent, stack detector (Angular / React / Vue / Next.js / Nuxt / Svelte), token crawlers for Tailwind / SCSS variables / CSS variables / Style Dictionary, component classifier (presentational / business / unknown).
 - **Phase 3 (planned):** `react-vite` template, `preview` skill.
 
 ## License
