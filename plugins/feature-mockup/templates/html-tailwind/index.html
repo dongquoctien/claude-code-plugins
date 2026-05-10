@@ -6,6 +6,7 @@
   <title>{{FEATURE_TITLE}}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     :root {
       --color-bg: #ffffff;
@@ -45,10 +46,17 @@
 
   <!-- Prototype Navigator (injected by prototype-builder) -->
   <nav id="proto-nav" class="fixed bottom-4 right-4 card shadow-lg" style="max-width: 280px;">
-    <p class="text-xs font-semibold uppercase tracking-wider mb-2" style="color: var(--color-muted);">Prototype Navigator</p>
+    <p class="text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style="color: var(--color-muted);">
+      <i data-lucide="compass" class="w-3.5 h-3.5"></i>
+      Prototype Navigator
+    </p>
     <ul class="space-y-1 text-sm" id="proto-nav-list">
       <li><a href="./index.html" class="hover:underline">Home</a></li>
     </ul>
   </nav>
+
+  <script>
+    if (window.lucide) lucide.createIcons();
+  </script>
 </body>
 </html>

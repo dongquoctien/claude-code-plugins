@@ -60,10 +60,10 @@ Most planning tools stop at a spec. By the time devs read it, the BA has already
 
 | Skill | Status | Purpose |
 |---|---|---|
-| `/feature-mockup:init` | ✅ Phase 1 | Initialize `.claude/feature-mockup.json` |
-| `/feature-mockup:make` | ✅ Phase 1 | Generate a prototype from inputs |
-| `/feature-mockup:ingest-theme` | 🔜 Phase 2 | Import the team's real FE design |
-| `/feature-mockup:preview` | 🔜 Phase 3 | Open the generated prototype in a browser |
+| `/feature-mockup:init` | Phase 1 | Initialize `.claude/feature-mockup.json` |
+| `/feature-mockup:make` | Phase 1 | Generate a prototype from inputs |
+| `/feature-mockup:ingest-theme` | Phase 2 | Import the team's real FE design (tokens + components) |
+| `/feature-mockup:preview` | Phase 3 | Open the generated prototype in a browser |
 
 ## What devs need to export (for `ingest-theme`, Phase 2)
 
@@ -77,7 +77,9 @@ Full spec: see `docs/fe-export-spec.md` (Phase 2).
 
 ## Status
 
-Phase 1 (MVP) — `init` + `make` + html-tailwind template + 2 agents. Theme import and React template ship in Phase 2/3.
+- **Phase 1 (shipped):** `init`, `make`, `html-tailwind` template, `input-analyzer` + `prototype-builder` agents.
+- **Phase 2 (shipped):** `ingest-theme` skill, `theme-extractor` agent, normalized tokens pipeline, component cloning with import rewriting, `docs/fe-export-spec.md` for devs.
+- **Phase 3 (planned):** `react-vite` template, `preview` skill.
 
 ## License
 

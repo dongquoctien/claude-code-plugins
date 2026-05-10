@@ -50,8 +50,9 @@ The parent skill will pass you:
         { "name": "email", "label": "<localized — what the user sees>", "type": "email", "required": true, "placeholder": "..." }
       ],
       "ctas": [
-        { "label": "<localized>", "action": "navigate:<other-screen-id>", "variant": "primary" }
+        { "label": "<localized>", "action": "navigate:<other-screen-id>", "variant": "primary", "icon": "<lucide-name | omitted>" }
       ],
+      "icon": "<lucide-name | omitted — icon for the screen's main visual indicator>",
       "notes": "<things the analyzer noticed but isn't sure about>"
     }
   ],
@@ -79,6 +80,7 @@ The parent skill will pass you:
 - **Conflicting inputs:** prefer the most recent doc; record the conflict in `openQuestions`.
 - **Component names:** stick to a small canonical set: `Header`, `Footer`, `Form`, `Field`, `Button`, `Card`, `Modal`, `Tabs`, `Table`, `List`, `EmptyState`, `Toast`, `Stepper`. Anything else → describe in `notes`.
 - **Field naming:** `name` is a snake_case/camelCase technical identifier (e.g., `email`, `cancelReason`). `label` is the localized human-readable string the user actually sees (e.g., `Lý do huỷ`). The builder uses `name` for the HTML `id`/`name` attributes and `label` for the visible `<label>` text — both are required.
+- **Icons (when relevant):** if a screen needs a visual indicator (success state, warning, empty list, primary CTA decoration), add an optional `icon` field with a Lucide icon name (e.g., `check-circle-2`, `alert-triangle`, `inbox`). NEVER emit emoji characters in the brief — the builder will render Lucide icons. Full list at https://lucide.dev/icons.
 - **Don't invent business rules.** If the inputs don't say "min booking 24h", don't write that as a requirement — put it in `openQuestions`.
 
 ## Style
