@@ -186,27 +186,26 @@ After the `@theme` block, add an `@layer base` block that forces admin metrics. 
 }
 ```
 
-### 4c. Inject source SCSS partials (highest fidelity)
+### 4c. Link the pre-compiled SCSS bundle (highest fidelity)
 
-For maximum match, read these files from `{themeDir}/source-copy/src/assets/scss/` and append them as raw CSS at the END of `src/index.css` (after `@theme` and `@layer base`):
+The export ships `{themeDir}/styles.compiled.css` — a real CSS file produced by running the source product's own `sass` compiler at extract-design time. This is 8000+ pre-resolved selectors covering every `.btn`, `.btn-primary`, `.page-sidebar`, `.k-grid`, `.input`, `.tabs-nav`, etc. that the live product uses. NO `$variables`, NO `darken()`, NO `@import` to resolve at the BA side.
 
-| Partial | Why |
-|---|---|
-| `_layout.scss` | `.page-wrap`, `.page-sidebar`, `.page-logo`, `.page-header`, `.nav-menu` — admin shell exact layout |
-| `_buttons.scss` | `.btn`, `.btn-primary`, `.btn.xs/.md/.lg` — exact button class catalog |
-| `_form.scss` | `.input`, `.input.search`, `.input.calendar` — input wrappers with icons |
-| `_table.scss` | grid header bg, hover row, cell heights |
-| `_components.scss` | `.tabs-nav`, `.pagination .page-num`, `.modal-titlebar` |
+Steps:
+1. Copy `{themeDir}/styles.compiled.css` to `src/styles/source.css` in the prototype.
+2. Import it in `src/main.tsx` AFTER your own `index.css`:
+   ```ts
+   import './index.css'
+   import './styles/source.css'
+   ```
+3. Now when a React component renders `<div className="page-sidebar">`, it picks up oh-admin's exact `.page-sidebar` rule (width 215px, bg `var(--theme-color2)`, etc.) automatically.
 
-Process each:
-1. Replace `$--variable` references with values from `tokens.json` (e.g., `$--primary` → `var(--color-primary)`, `$--xs` → `var(--admin-h-xs)`, `$--common-radius` → `var(--admin-radius)`).
-2. Replace `darken($foo, 10)` with `color-mix(in srgb, var(--color-foo) 90%, black)`.
-3. Strip `@import` lines (skip vendor imports like `~@angular/cdk`).
-4. Append to `src/index.css`.
+The order matters:
+- **First** (cascade-loses): `index.css` with shadcn `@theme` + admin density `@layer base` (Step 4b)
+- **Last** (cascade-wins): `source.css` (compiled SCSS) — wins for any class name match like `.btn` / `.page-sidebar`
 
-The result: when prototype's React component renders `<div className="page-sidebar">`, it inherits the EXACT styles oh-admin uses, on top of shadcn's Tailwind utilities. Visual fidelity becomes near-pixel-perfect.
+This gives you shadcn's interactivity primitives (Form / Dialog / Toast / Select with keyboard nav) where the source has no equivalent, AND the source's exact visual class catalog where it does.
 
-When the source uses Tailwind already (manifest.stack.css === 'tailwind'), skip step 4c — there are no SCSS partials to inject. Use 4a + 4b only.
+When the source uses Tailwind already (manifest.stack.css === 'tailwind'), `styles.compiled.css` will be missing or trivially small — skip 4c, the Tailwind config in 4a is enough.
 
 ## Step 5 — Generate mock data (`src/mocks/`)
 

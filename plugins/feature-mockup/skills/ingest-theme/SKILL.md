@@ -57,6 +57,7 @@ Additionally, when the export contains the following, copy them verbatim into th
   - {EXPORT_DIR}/icon-detection.json → {output}/icon-detection.json (icon library + brand logo path).
   - {EXPORT_DIR}/validators-detection.json → {output}/validators-detection.json (per-field validation rules — prototype-builder converts to zod schemas).
   - {EXPORT_DIR}/mock-data-detection.json → {output}/mock-data-detection.json (hardcoded arrays from source services — prototype-builder seeds mock data from these).
+  - {EXPORT_DIR}/styles.compiled.css → {output}/styles.compiled.css (pre-compiled SCSS bundle from the source product's own sass — already has $variables / darken() / mixins resolved. Prototype-builder links this directly from src/main.tsx for pixel-perfect class catalog match).
   - {EXPORT_DIR}/source-copy/ → {output}/source-copy/ (verbatim Angular templates / Vue SFCs / React components — agent reads from here, not the dev's machine).
   - {EXPORT_DIR}/component-styles.raw.scss → run AI cleanup pass to produce {output}/component-styles.compiled.css (see theme-extractor.md Phase 2).
   - {EXPORT_DIR}/assets/ → {output}/assets/ (icons + images + fonts + raw style partials).

@@ -167,6 +167,14 @@ Now do the actual work, in this order:
 
    **Why this matters:** the BA usually doesn't have the dev's source repo. Without this step, `source-index.json` lists paths the BA's agent cannot resolve. Copying the actual files makes the export self-contained — the BA agent can `Read` any path it sees in `source-index.json`. Verified on oh-admin: 3074 files (1153 templates + 1157 components + 387 services + 362 modules) = 12.5 MB.
 
+3a. **Compile global SCSS partials → CSS.** Run:
+   ```bash
+   node {pluginRoot}/scripts/compile-scss.mjs --in {projectRoot} --out {tmpDir}/styles.compiled.css
+   ```
+   Compiles all global SCSS partials (`_layout.scss`, `_buttons.scss`, `_form.scss`, `_table.scss`, `_components.scss`, etc.) into a single CSS file with `$variables`, `darken()`, `@include`, and `@import` chains all resolved. The script uses the project's own `node_modules/sass` (found in 90% of Angular/Vue projects) for accurate compile, supports both modern `compileString` and legacy `renderSync` APIs. Falls back to raw concat with a warning when `sass` is unavailable. Output is the highest-fidelity stylesheet possible — every `.btn`, `.btn-primary`, `.page-sidebar`, `.k-grid` selector renders exactly as it does in the live product. Verified on oh-admin: 16 partials → 667 KB CSS with 8870 selectors.
+
+   **Why this matters:** in v0.10.0 BA-side AI agents were given raw `.scss` files and expected to manually convert `$variables` to CSS values. That's error-prone (nested `darken()` calls, mixin expansion, etc.) and the prototype's visual fidelity suffered. By moving compilation to extract-design (DEV-side, where sass is available), the BA-side agent just `<link>`s the CSS directly. The interactive React+Vite prototype gets the EXACT visual styling of the live product on top of shadcn's interactivity.
+
 3. **Component styles — gather then AI-clean.** Run:
    ```bash
    node {pluginRoot}/scripts/concat-component-styles.mjs --in {projectRoot} --out {tmpDir}/component-styles.raw.scss
@@ -222,6 +230,7 @@ Now do the actual work, in this order:
        "dialogDetection": "dialog-detection.json",
        "validatorsDetection": "validators-detection.json",
        "mockDataDetection": "mock-data-detection.json",
+       "stylesCompiled": "styles.compiled.css",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",
        "componentStylesRaw": "component-styles.raw.scss",
