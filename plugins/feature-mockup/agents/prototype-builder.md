@@ -112,7 +112,11 @@ Add the components your feature actually uses (read brief + dialog-detection):
 
 Example: `npx shadcn@latest add button input textarea select label form table dialog tabs sonner badge alert pagination card separator checkbox radio-group dropdown-menu popover calendar`
 
-## Step 4 — Theme tokens → Tailwind config
+## Step 4 — Theme tokens → Tailwind config + admin density override
+
+**This is where v0.10 prototypes most often fail visual fidelity.** shadcn ships generous defaults: `Button` is `h-10` (40px), `radius` is 0.625rem (10px), table cells are `px-4 py-3`. Admin systems use **24px buttons, 3px radius, 6/10 padding, 12-13px font**. Without explicit overrides, the prototype looks like a SaaS dashboard, not an admin grid.
+
+Follow these layers in `src/index.css`:
 
 Open `src/index.css` (or wherever shadcn put its theme block). Replace the default shadcn colors with values from `{themeDir}/tokens.json`:
 
@@ -136,6 +140,73 @@ Open `src/index.css` (or wherever shadcn put its theme block). Replace the defau
 If `manifest.stack.activeThemeVariant === 'sky-black'`, also add a `.dark` block or specific sidebar token for the dark sidebar. Read `theme.css` from the import for reference.
 
 If `tokens.typography.fontSans` references a non-system font (Pretendard / Inter / Manrope), prepend a `@import url('...cdn...')` for the matching font CDN at the top of `src/index.css`.
+
+### 4b. Admin density override (mandatory for admin systems)
+
+After the `@theme` block, add an `@layer base` block that forces admin metrics. Use values from `tokens.json` (button heights from `--h-xs/sm/md/lg`, radius from `radii.md`, font sizes from typography):
+
+```css
+@layer base {
+  :root {
+    --admin-h-xs: 24px;    /* from tokens — primary button + filter input */
+    --admin-h-sm: 32px;
+    --admin-h-md: 38px;    /* form modal Save buttons */
+    --admin-radius: 3px;   /* override shadcn 0.625rem */
+    --admin-font-xs: 0.75rem;     /* 12px — table cells */
+    --admin-font-sm: 0.8125rem;   /* 13px — sidebar */
+    --admin-font-base: 0.875rem;  /* 14px — body */
+  }
+
+  /* Override shadcn Button height for admin density */
+  button[data-slot="button"]:not(.btn-default-size) {
+    height: var(--admin-h-xs);
+    padding: 0 13px;
+    font-size: var(--admin-font-xs);
+    border-radius: var(--admin-radius);
+  }
+  button[data-slot="button"][data-size="md"] { height: var(--admin-h-md); padding: 0 25px; font-size: var(--admin-font-base); }
+  button[data-slot="button"][data-size="lg"] { height: 50px; padding: 0 30px; }
+
+  /* Inputs / selects same height as button-xs */
+  input[data-slot="input"], textarea[data-slot="textarea"], button[data-slot="select-trigger"] {
+    height: var(--admin-h-xs);
+    padding: 0 8px;
+    font-size: var(--admin-font-xs);
+    border-radius: var(--admin-radius);
+  }
+
+  /* Table cells compact */
+  table th, table td { padding: 6px 10px; font-size: var(--admin-font-xs); }
+
+  /* Card border thin (admin uses 1px, no shadow) */
+  div[data-slot="card"] { box-shadow: none; border: 1px solid var(--color-border); border-radius: var(--admin-radius); }
+
+  /* Dialog content radius */
+  div[data-slot="dialog-content"] { border-radius: var(--admin-radius); }
+}
+```
+
+### 4c. Inject source SCSS partials (highest fidelity)
+
+For maximum match, read these files from `{themeDir}/source-copy/src/assets/scss/` and append them as raw CSS at the END of `src/index.css` (after `@theme` and `@layer base`):
+
+| Partial | Why |
+|---|---|
+| `_layout.scss` | `.page-wrap`, `.page-sidebar`, `.page-logo`, `.page-header`, `.nav-menu` — admin shell exact layout |
+| `_buttons.scss` | `.btn`, `.btn-primary`, `.btn.xs/.md/.lg` — exact button class catalog |
+| `_form.scss` | `.input`, `.input.search`, `.input.calendar` — input wrappers with icons |
+| `_table.scss` | grid header bg, hover row, cell heights |
+| `_components.scss` | `.tabs-nav`, `.pagination .page-num`, `.modal-titlebar` |
+
+Process each:
+1. Replace `$--variable` references with values from `tokens.json` (e.g., `$--primary` → `var(--color-primary)`, `$--xs` → `var(--admin-h-xs)`, `$--common-radius` → `var(--admin-radius)`).
+2. Replace `darken($foo, 10)` with `color-mix(in srgb, var(--color-foo) 90%, black)`.
+3. Strip `@import` lines (skip vendor imports like `~@angular/cdk`).
+4. Append to `src/index.css`.
+
+The result: when prototype's React component renders `<div className="page-sidebar">`, it inherits the EXACT styles oh-admin uses, on top of shadcn's Tailwind utilities. Visual fidelity becomes near-pixel-perfect.
+
+When the source uses Tailwind already (manifest.stack.css === 'tailwind'), skip step 4c — there are no SCSS partials to inject. Use 4a + 4b only.
 
 ## Step 5 — Generate mock data (`src/mocks/`)
 
