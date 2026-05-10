@@ -3,8 +3,8 @@
 // so the BA agent can read them WITHOUT having access to the dev's source repo.
 //
 // Output structure mirrors the source so paths in source-index.json keep resolving:
-//   {out}/src/app/routes/ho-hotel-contents/components/grid/...component.html
-//   {out}/src/app/routes/ho-hotel-contents/services/...service.ts
+//   {out}/src/app/routes/<route-folder>/components/<component>/...component.html
+//   {out}/src/app/routes/<route-folder>/services/...service.ts
 //
 // Budget-aware: caps total size, prefers smaller files, skips test/spec/story files.
 

@@ -203,7 +203,7 @@ for (const k of Object.keys(buckets)) {
 }
 
 // ─── Route groups: query files by feature folder name ────────────────────────
-// AI building feature 'ho-hotel-contents' can ask routeGroups['ho-hotel-contents']
+// AI building feature '<route-folder-name>' can ask routeGroups['<route-folder-name>']
 // instead of filtering bucket lists. Saves tokens on navigation.
 const routeGroups = {};
 for (const route of buckets.routes) {

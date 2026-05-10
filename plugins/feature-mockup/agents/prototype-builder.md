@@ -78,14 +78,14 @@ Reading the right knowledge file BEFORE the source prevents systematic mistakes:
    - `routes` for menu structure when generating an admin shell
    The index gives one-line summaries (size + top selectors + Angular `selector` + `styleUrls`) so you can pick the 3-5 most relevant files to actually read in full, instead of brute-forcing every file.
 
-   **For feature-specific work** (e.g. building a prototype for `bulk-cancel-bookings` or `hotel-content-management`), use `source-index.json` `routeGroups` first:
+   **For feature-specific work** (e.g. building a prototype for a specific route like `bulk-cancel-bookings`, `user-management`, `invoice-list`), use `source-index.json` `routeGroups` first:
    ```
-   routeGroups['ho-hotel-contents'] = {
-     routePath: 'src/app/routes/ho-hotel-contents',
-     templates: [10 paths],
-     components: [10 paths],
-     componentStyles: [3 paths],
-     services: [3 paths]
+   routeGroups['<route-folder-name>'] = {
+     routePath: 'src/app/routes/<route-folder-name>',
+     templates: [N paths],
+     components: [N paths],
+     componentStyles: [N paths],
+     services: [N paths]
    }
    ```
    This gives you the EXACT files for that feature in one lookup, avoiding the cost of filtering 1000+ files in the global buckets. When you find a custom HTML tag like `<app-layout-sidebar-menu-group>` in a template, look up the source file via `componentBySelector['app-layout-sidebar-menu-group']`.
@@ -597,7 +597,7 @@ When the admin shell is active (Step 5b), render brief components with these pat
 
 - **Table (k-grid)** — wrap in `<div class="k-grid"><div class="k-grid-scroll"><table>`. Header `<th>` cells use light grey bg, separated by 1px right border. Each body row uses **two lines per cell** — the primary value first, then a `<span class="row-line2">` with smaller muted secondary info (e.g. `BK-2026-0142` line 1, `1128814857440366` line 2). For multi-select tables, the first column is a 36px-wide checkbox. Booking IDs in the first column are rendered as `<a class="booking-id">` (underlined primary-darken).
 
-- **Status columns — plain colored text, NOT badges.** oh-admin and most enterprise admins display "Confirmed", "Reserved", "Cancelled(Replied)" as bold colored text inline, not as pill badges:
+- **Status columns — plain colored text, NOT badges.** Most enterprise admins display "Confirmed", "Reserved", "Cancelled(Replied)" as bold colored text inline, not as pill badges:
   ```html
   <span class="status-confirmed">Confirmed</span>
   <span class="status-cancelled">Cancelled(Replied)</span>
@@ -701,7 +701,7 @@ For `react-vite`, this is a `<PrototypeNav />` component rendered in the layout.
 
 Read `{themeDir}/source-manifest.json` if `themeBranch === "real-system"`. When `stack.uiLib` is one of `kendo`, `material`, `antd`, `chakra` — OR when the original framework is Angular/Vue with no UI library AND the imported tokens include `--color-sidebar-bg` — wrap every screen in a full admin layout instead of the centered single-column layout.
 
-### Admin shell anatomy (verified against oh-admin)
+### Admin shell anatomy (typical enterprise admin layout)
 
 A faithful admin shell has SEVEN regions, top to bottom:
 
