@@ -53,6 +53,11 @@ Goal:
 
 Additionally, when the export contains the following, copy them verbatim into the output (preserving folder structure so url() refs resolve):
   - {EXPORT_DIR}/source-index.json → {output}/source-index.json (categorized map of every source file with one-line summaries — read this BEFORE individual files when you need to navigate the design).
+  - {EXPORT_DIR}/dialog-detection.json → {output}/dialog-detection.json (per-feature map of dialog/modal headers and toast patterns — prototype-builder uses this to render overlays).
+  - {EXPORT_DIR}/icon-detection.json → {output}/icon-detection.json (icon library + brand logo path).
+  - {EXPORT_DIR}/validators-detection.json → {output}/validators-detection.json (per-field validation rules — prototype-builder converts to zod schemas).
+  - {EXPORT_DIR}/mock-data-detection.json → {output}/mock-data-detection.json (hardcoded arrays from source services — prototype-builder seeds mock data from these).
+  - {EXPORT_DIR}/source-copy/ → {output}/source-copy/ (verbatim Angular templates / Vue SFCs / React components — agent reads from here, not the dev's machine).
   - {EXPORT_DIR}/component-styles.raw.scss → run AI cleanup pass to produce {output}/component-styles.compiled.css (see theme-extractor.md Phase 2).
   - {EXPORT_DIR}/assets/ → {output}/assets/ (icons + images + fonts + raw style partials).
 

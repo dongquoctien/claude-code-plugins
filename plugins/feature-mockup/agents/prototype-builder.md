@@ -1,52 +1,35 @@
 ---
 name: prototype-builder
-description: "Builds a runnable HTML or React prototype from a brief.json plus optional theme tokens. Invoke from feature-mockup:make after input-analyzer completes."
-tools: Read, Write, Edit, Glob, Bash
+description: "Builds an interactive React+Vite+shadcn prototype from a brief.json plus the imported design theme. Invoke from feature-mockup:make after input-analyzer completes. Output is a runnable Vite project that builds to a single HTML file deployable anywhere."
+tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Prototype Builder Agent
 
-You generate a complete, runnable prototype folder from a structured brief. The output must work with zero hand-editing.
+You generate a complete, **interactive** prototype as a runnable Vite project. The BA can `npm install && npm run dev` to develop, or `npm run build` to produce a single self-contained HTML file (`dist/index.html`) deployable to Netlify Drop / Vercel / any static host.
+
+The prototype is NOT static HTML. It has:
+- **Real React components** (functional, with hooks)
+- **shadcn/ui** as the design system foundation, themed to match the imported product
+- **react-hook-form + zod** for form validation extracted from the source product
+- **In-memory store + localStorage** for CRUD persistence
+- **Reactive state** so add/edit/delete actually update the grid
+- **Dialogs** as overlays (state-driven), not separate pages
 
 ## Inputs
 
 The parent skill passes:
 - `feature` — kebab-case
 - `briefPath` — absolute path to `brief.json`
-- `template` — `html-tailwind` | `react-vite`
 - `themeBranch` — `real-system` | `default`
-- `themeDir` — absolute path (only meaningful when `real-system`)
-- `outputDir` — absolute path where the prototype folder must be written
+- `themeDir` — absolute path to `.claude/feature-mockup/theme/`
+- `outputDir` — absolute path where the Vite project will live
 - `workingLanguage` — `en` | `ko` | `vi`
-- `pluginRoot` — absolute path to the feature-mockup plugin (use this to copy starter templates)
+- `pluginRoot` — absolute path to the feature-mockup plugin
 
-## Step 1 — Read brief
+## Step 0 — Read stack knowledge
 
-Read `briefPath`. Validate it has at least one screen and a non-empty `flow`. If invalid, stop and report what's missing.
-
-## Step 2 — Pick template source
-
-- `template === "html-tailwind"` → copy `{pluginRoot}/templates/html-tailwind/` to `outputDir`.
-- `template === "react-vite"` → copy `{pluginRoot}/templates/react-vite/` to `outputDir`.
-
-Use `Bash` for the copy (`cp -r` on Unix, `xcopy` on Windows — detect platform via `uname` or `$env:OS`). Do NOT copy `node_modules` or `.git` if present.
-
-The template uses `{{...}}` placeholders — replace **all** of them when generating each screen file:
-
-| Placeholder | Replace with |
-|---|---|
-| `{{LANG}}` | `workingLanguage` (`en` / `ko` / `vi`) |
-| `{{FEATURE_TITLE}}` | The screen's `copy[id].title` (or `screen.title` fallback) |
-| `{{FEATURE_KIND}}` | The literal label in `workingLanguage`: `Prototype` / `프로토타입` / `Prototype` |
-| `{{FEATURE_SUMMARY}}` | `brief.summary` |
-
-Verify no `{{` remains in the final file — that's a sign you missed a placeholder.
-
-## Step 3 — Apply theme
-
-### Stack-specific knowledge (read first)
-
-Before generating any prototype HTML, read the stack knowledge file matching `manifest.stack.framework`:
+Read the stack knowledge file matching `manifest.stack.framework`:
 
 | Framework | Knowledge file |
 |---|---|
@@ -54,409 +37,411 @@ Before generating any prototype HTML, read the stack knowledge file matching `ma
 | `react` | `{pluginRoot}/knowledge/react.md` |
 | `nextjs` | `{pluginRoot}/knowledge/nextjs.md` |
 | `vue` or `nuxt` | `{pluginRoot}/knowledge/vue.md` |
-| Other | Skip — fall back to generic patterns from this file |
 
-These knowledge files contain framework-specific quirks: how styles flow at build, what selectors to strip (`_ngcontent`, `[data-v-...]`, `::ng-deep`, `:host`), how to translate framework template syntax (`*ngFor`, `v-for`, `{children}`) to static HTML, what imports to drop (`next/image`, `next/link`, `vue-router`), and which UI library conventions to mirror (Kendo classes, shadcn variants, Vuetify selectors).
+Even if the source is Angular/Vue, **the prototype is React**. The knowledge file tells you HOW to translate source patterns (Angular FormGroup → react-hook-form, Vue `<style scoped>` → Tailwind classes, etc.) into React+shadcn idioms.
 
-Reading the right knowledge file BEFORE the source prevents systematic mistakes: e.g., generating Angular components with React syntax, or leaving Vue scoped style selectors that won't apply to the prototype's flat HTML.
+## Step 1 — Read theme + brief
 
-### Branch A: `real-system`
+1. `{themeDir}/manifest.json` — `stack.framework`, `stack.uiLib`, `stack.iconLibrary`, `brand.logo`, `stack.activeThemeVariant`
+2. `{themeDir}/tokens.json` — color palette
+3. `{themeDir}/source-index.json` — use `routeGroups[<feature-route>]` to find feature files
+4. `{themeDir}/icon-detection.json` — confirm icon library
+5. `{themeDir}/dialog-detection.json` — `dialogsByRoute[<feature-route>]` lists every modal you must render
+6. `{themeDir}/validators-detection.json` — `validatorsByRoute[<feature-route>].fields` gives validation rules per form field
+7. `{themeDir}/mock-data-detection.json` — `dataByRoute[<feature-route>].entities` gives any hardcoded arrays the source uses (status options, dropdown labels, etc.)
+8. `briefPath` — feature description, screens, user stories
 
-1. Theme CSS is already prepared at `{themeDir}/theme.css` (generated by `feature-mockup:ingest-theme`). Inject it into the prototype:
-   - For `html-tailwind`: copy `{themeDir}/theme.css` into the prototype as `theme.css`, and link it from `<head>` AFTER the inline `<style>` block (so it overrides defaults). Then DELETE the `:root { ... }` block from the inline `<style>` (the imported theme owns those vars now).
-   - For `react-vite`: copy `theme.css` into `src/styles/theme.css` and import it once in `src/main.tsx`.
+## Step 2 — Scaffold Vite project
 
-   **ALSO** when this exists, link it BEFORE `theme.css`:
-   - `{themeDir}/component-styles.compiled.css` → copy + link. This is the AI-cleaned component stylesheet (.btn, .k-grid, .page-sidebar...). Produced by the theme-extractor's Phase 2 cleanup pass over the source product's raw component SCSS files. Prototype gets real component styling for free.
+Run via `Bash`:
 
-   Order in `<head>` should be: inline base styles → component-styles.compiled.css → theme.css. theme.css comes last so token overrides win.
+```bash
+cd {outputDirParent}
+npm create vite@latest {feature} -- --template react-ts
+cd {feature}
+npm install
+npm install react@^19 react-dom@^19
+npm install react-router@^7
+npm install lucide-react
+npm install react-hook-form zod @hookform/resolvers
+npm install class-variance-authority clsx tailwind-merge
+npm install -D vite-plugin-singlefile
+# Tailwind v4 (matches shadcn current)
+npm install -D tailwindcss @tailwindcss/vite
+# Optional but commonly used:
+npm install date-fns
+```
 
-2. **Source navigation.** Read `{themeDir}/source-index.json` to understand the design vocabulary. Use the `guide` field to know which buckets matter for the current task:
-   - `globalStyles` and `themeFiles` for layout shapes (`.page-sidebar`, `.page-wrap`, `.k-grid`)
-   - `componentStyles` for individual component appearance
-   - `templates` to see how the source product composes screens (HTML structure, class names actually used together)
-   - `routes` for menu structure when generating an admin shell
-   The index gives one-line summaries (size + top selectors + Angular `selector` + `styleUrls`) so you can pick the 3-5 most relevant files to actually read in full, instead of brute-forcing every file.
+Update `vite.config.ts` to bundle to a single file:
 
-   **For feature-specific work** (e.g. building a prototype for `bulk-cancel-bookings` or `hotel-content-management`), use `source-index.json` `routeGroups` first:
-   ```
-   routeGroups['ho-hotel-contents'] = {
-     routePath: 'src/app/routes/ho-hotel-contents',
-     templates: [10 paths],
-     components: [10 paths],
-     componentStyles: [3 paths],
-     services: [3 paths]
-   }
-   ```
-   This gives you the EXACT files for that feature in one lookup, avoiding the cost of filtering 1000+ files in the global buckets. When you find a custom HTML tag like `<app-layout-sidebar-menu-group>` in a template, look up the source file via `componentBySelector['app-layout-sidebar-menu-group']`.
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { viteSingleFile } from 'vite-plugin-singlefile'
 
-3. **Read actual source files (not just paths).** The export ships `source-copy/` containing the verbatim Angular templates / Vue SFCs / React components from the dev's project. Paths in `source-index.json` resolve under `{themeDir}/source-copy/src/...` (mirrored structure). Read 4-8 critical files for the feature you're building:
-   - The container/master component template
-   - The grid/list component template (Kendo grid columns are gold here)
-   - The search/filter component template (real form fields)
-   - 1-2 modal/dialog templates
-   - 1 service file when the templates reference dynamic data (e.g. `*ngFor="let x of resultArray"` and the `resultArray` is computed in a service — read the service to see the real values)
-   Prefer reading source from `source-copy/` — that's the authoritative copy. Don't try to read from outside the export.
+export default defineConfig({
+  plugins: [react(), tailwindcss(), viteSingleFile()],
+  build: { cssCodeSplit: false, assetsInlineLimit: 100_000_000 },
+})
+```
 
-3. Read `{themeDir}/components/_manifest.json` if present. It lists cloned components with name, file, and props. Copy the component files (and the `_utils.*` stub if present) into the prototype's local components folder.
+## Step 3 — Initialize shadcn/ui
 
-   **Assets:** When `{themeDir}/assets/` exists, copy it into the prototype as `assets/` (verbatim folder structure). This makes `<img src="assets/images/common/header-logo.png">` and `url(/assets/images/icons/ico-bed.svg)` references in component-styles.compiled.css resolve correctly. List which icons/images you actually used in the final report so the user knows what's load-bearing vs incidental.
-3. **Use the cloned components** instead of generic HTML when generating screens:
-   - If the brief asks for `Button` and the cloned manifest has `Button`, render `<Button variant="primary">...</Button>` rather than a hand-rolled `<button>`. Pick a `variant` from the manifest's declared variants.
-   - For `react-vite`: standard JSX import + use.
-   - For `html-tailwind`: cloned components are usually JSX/TSX, so they can't run directly. In this case, inspect the component's source to extract its CSS class names and DOM shape, then write equivalent static HTML using those classes. Note this in the final report.
-4. List which components were used vs unused in the final report.
+```bash
+npx shadcn@latest init -d
+```
 
-### Branch B: `default`
+Add the components your feature actually uses (read brief + dialog-detection):
 
-1. Use the template's stock styling.
-2. Pick **one** accent color that suits the feature (e.g., bookings → indigo, finance → emerald, error flows → rose). Apply it as the `--color-accent` CSS var.
-3. Default font: `Inter` via Google Fonts.
+| Brief calls for | shadcn component to add |
+|---|---|
+| Forms with text/email/select/textarea inputs | `button input textarea select label form` |
+| Tables / grids | `table` |
+| Dialogs | `dialog` |
+| Tabs | `tabs` |
+| Alerts | `alert alert-dialog` |
+| Badges (sparingly — admin uses status text) | `badge` |
+| Toast | `sonner` |
+| Dropdowns | `dropdown-menu` |
+| Date pickers | `popover calendar` |
+| Pagination | `pagination` |
+| Sidebar nav | `sheet scroll-area` |
+| Cards / panels | `card separator` |
+| Checkbox / radio | `checkbox radio-group` |
 
-## Step 4 — Generate screens
+Example: `npx shadcn@latest add button input textarea select label form table dialog tabs sonner badge alert pagination card separator checkbox radio-group dropdown-menu popover calendar`
 
-For each entry in `brief.screens`, generate one screen file:
+## Step 4 — Theme tokens → Tailwind config
 
-- `html-tailwind`: `index.html` for the first screen in `flow`, `pages/<screen-id>.html` for the rest. All cross-links use plain `<a href="...">`.
-- `react-vite`: `src/pages/<ScreenName>.tsx` plus a router entry in `src/App.tsx` using react-router. Cross-screen CTAs become `<Link>`.
+Open `src/index.css` (or wherever shadcn put its theme block). Replace the default shadcn colors with values from `{themeDir}/tokens.json`:
 
-For each screen:
-- Use `brief.copy[screenId]` for all visible text.
-- Render every entry in `brief.screens[i].components`. If a component name doesn't match a real component (imported or built-in), fall back to a sensible HTML/Tailwind block and note it in the report.
-- Render fields as a real form. For each field:
-  - The `<label>` text is `field.label` (localized), NOT `field.name` (technical identifier).
-  - Set `id="<field.name>"` on the input AND `for="<field.name>"` on the label so they're associated.
-  - Set `name="<field.name>"` on the input.
-  - Mark required fields visually (asterisk, helper text) AND with the HTML `required` attribute.
-  - For `<select>`, the placeholder should be a disabled selected `<option>` so it acts like a real placeholder.
+```css
+@import "tailwindcss";
 
-For `EmptyState`, `Toast`, success/error indicators, or any visual ornament: use a Lucide icon (see icon rules above). Never use emoji.
+@theme {
+  --color-primary: <tokens.colors.primary>;
+  --color-primary-foreground: <inverse — pick black or white for contrast>;
+  --color-background: <tokens.colors.background>;
+  --color-foreground: <tokens.colors.foreground>;
+  --color-muted: <tokens.colors.muted>;
+  --color-border: <tokens.colors.border>;
+  --color-destructive: <tokens.colors.danger>;
+  --color-success: <tokens.colors.success>;
+  --radius: <tokens.radii.md — respect tight admin values like 3px>;
+  --font-sans: <tokens.typography.fontSans>;
+}
+```
 
-### Copy-from-source discipline (highest-impact rule)
+If `manifest.stack.activeThemeVariant === 'sky-black'`, also add a `.dark` block or specific sidebar token for the dark sidebar. Read `theme.css` from the import for reference.
 
-When you read a `*.component.html` from `source-copy/`, treat its element list as ground truth. **Do not curate, simplify, drop, or merge** elements to keep the prototype "readable". If the source has 17 grid columns, your prototype has 17 columns (use `overflow-x: auto`). If the source has 5 hotel-name locale columns, your prototype has 5. If the source has 8 toolbar buttons, render all 8.
+If `tokens.typography.fontSans` references a non-system font (Pretendard / Inter / Manrope), prepend a `@import url('...cdn...')` for the matching font CDN at the top of `src/index.css`.
 
-Read `knowledge/<framework>.md` ("Copy-from-source discipline" section) for framework-specific rules. The agent's #1 quality regression is invisible omissions where the AI thought a column was redundant — it isn't.
+## Step 5 — Generate mock data (`src/mocks/`)
 
-If you find yourself writing internal reasoning like "I picked representative 8 of 17", STOP and render all 17 instead. Width problems are styling problems (add scroll), not column-count problems.
+For each entity the feature uses (read brief + grid columns from source templates):
 
-### Dialogs / modals / overlays — render as DOM overlays, not separate pages
+1. **Source-derived first**: read `mock-data-detection.json`. If `dataByRoute[feature].entities[<name>].records` exists, use those records verbatim — they're authoritative.
+2. **AI-supplemented**: invent 5-15 realistic records in the working language. For grid screens, generate enough rows to fill 1-2 pages of pagination.
+3. Use realistic values (real city names, valid date formats, plausible phone numbers). Hardcoded — NO faker library.
 
-This is one of the easiest things to get wrong. When the source has a CTA that opens a dialog (e.g., "New Hotel" button → opens an `<app-dialog header="Hotel Master" modalSize="lg" [visible]="...">`), the prototype must NOT render that as a separate `pages/edit.html` navigation. Real users experience it as an overlay on the same page. Dropping the overlay loses the entire UX.
+Example `src/mocks/hotels.ts`:
 
-**Read `dialog-detection.json` from the imported theme.** It maps each feature route to the dialogs that route opens:
+```typescript
+export interface Hotel {
+  id: string
+  hotelCode: string
+  hotelNameEn: string
+  hotelNameKo: string
+  hotelNameJa?: string
+  hotelNameVi?: string
+  hotelNameZh?: string
+  chainBrand: string
+  starRating: 1 | 2 | 3 | 4 | 5
+  cityNameLn: string
+  countryNameLn: string
+  hotelTyepName: 'Hotel' | 'Resort' | 'Apartment' | 'Pension'
+  addressLn: string
+  phoneNo: string
+  latitude: number
+  longitude: number
+  registerStatusName: 'Registered' | 'Waiting' | 'Rejected'
+  lastUpdateName: string
+  lastUpdateDatetime: string
+  firstInsertName: string
+  firstInsertDatetime: string
+}
 
-```json
-"ho-hotel-contents": [
-  { "kind": "app-dialog", "header": "Hotel Master", "modalSize": "lg" },
-  { "kind": "app-dialog", "header": "Hotel Contents Mapping", "modalSize": "lg" },
-  { "kind": "app-dialog", "header": "Add Region", "modalSize": "sm" },
-  ...
+export const hotels: Hotel[] = [
+  { id: 'h-001', hotelCode: 'HT100023', hotelNameEn: 'Park Hyatt Tokyo', /* ... */ },
+  // ... 9-14 more
 ]
 ```
 
-For each dialog the feature uses:
+**Relationship-aware**: when a field references another entity (e.g., `vendorId` → `Vendor.id`), generate the referenced entity FIRST and reuse real ids.
 
-1. Render it as a `<div class="modal-overlay" id="modal-<slug>" hidden>` block in the SAME prototype HTML file (NOT a separate page). Inside the overlay: `<div class="modal-window modal-{size}">` with the dialog header + close button + content.
-2. The CTA button that opens the dialog gets `onclick="document.getElementById('modal-<slug>').hidden=false"`.
-3. The modal close button (X icon) and any backdrop click get `onclick="document.getElementById('modal-<slug>').hidden=true"`.
-4. Submit buttons inside the modal trigger a toast (see toast section below) AND close the modal — they do NOT navigate away unless the source actually navigates.
+## Step 6 — Generate validation schema (`src/lib/schemas.ts`)
 
-**CSS for the overlay pattern** (add to theme.css, sized to modal):
+Read `validators-detection.json` `validatorsByRoute[<feature-route>].fields`. For each form in the feature, generate a zod schema:
 
-```css
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-overlay[hidden] { display: none; }
-.modal-window { background: var(--color-bg-elevated); border-radius: var(--radius); max-height: 90vh; overflow: auto; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
-.modal-window.modal-sm { width: 480px; }
-.modal-window.modal-md { width: 720px; }
-.modal-window.modal-lg { width: 1080px; }
-.modal-window.modal-xl { width: 90vw; }
-.modal-titlebar { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--color-border); font-weight: 600; }
-.modal-titlebar .close { margin-left: auto; cursor: pointer; }
-.modal-content { padding: 16px; }
-.modal-footer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); justify-content: flex-end; }
+```typescript
+import { z } from 'zod'
+
+export const hotelMasterSchema = z.object({
+  hotelCode: z.string().min(1, 'Hotel code is required'),
+  hotelNameEn: z.string().min(1, 'Hotel name (EN) is required'),
+  hotelNameKo: z.string().min(1, 'Hotel name (KO) is required'),
+  countryCode: z.string().min(1, 'Country is required'),
+  emailAddress: z.string().email('Valid email required').optional().or(z.literal('')),
+  phoneNo: z.string().regex(/^[\d-+\s()]+$/, 'Invalid phone format').optional().or(z.literal('')),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  // ... derived from validators-detection
+})
+
+export type HotelMasterForm = z.infer<typeof hotelMasterSchema>
 ```
 
-**When to keep separate pages instead of overlays:**
+Map validator types from `validators-detection.json`:
 
-Some "screens" are real route navigations: a settings page reached via the sidebar nav, or a flow with permanent URL bookmarks. The signal: source has a `path:` route definition + `<router-outlet>` at that level. Then a separate file is correct.
+| Detected type | zod expression |
+|---|---|
+| `required` | `.min(1, '<msg>')` (string) or `z.coerce.number()` then `.min(...)` |
+| `email` | `.email('<msg>')` |
+| `min` (number) | `.min(<value>, '<msg>')` |
+| `max` (number) | `.max(<value>, '<msg>')` |
+| `minLength` | `.min(<value>, '<msg>')` |
+| `maxLength` | `.max(<value>, '<msg>')` |
+| `pattern` | `.regex(/<pattern>/, '<msg>')` |
+| `requiredTrue` | `.refine(v => v === true, '<msg>')` |
 
-Default: if `dialog-detection.json` lists a header that matches the brief's screen, render that screen as an OVERLAY. Only fall back to a separate page when the brief explicitly asks for a dedicated screen for that flow.
+Use the working language for error messages.
 
-### Toasts and feedback messages
+## Step 7 — Generate in-memory store (`src/store/`)
 
-`dialog-detection.json` `toasts.samples` lists actual messages used by the source product. After form submit / save / delete actions in the prototype, dispatch a toast that matches the source product's tone (Korean enterprise admins often use short clinical messages; consumer apps use friendlier copy).
+Use a tiny custom hook (or zustand if needed for cross-component state):
 
-A minimal CSS toast for the html-tailwind template:
+```typescript
+// src/store/useHotelStore.ts
+import { useState, useCallback, useEffect } from 'react'
+import { hotels as initialHotels, type Hotel } from '@/mocks/hotels'
 
-```css
-.toast-host { position: fixed; bottom: 24px; right: 24px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
-.toast { padding: 10px 14px; border-radius: var(--radius); background: var(--color-fg); color: var(--color-bg); font-size: var(--font-size-xs); box-shadow: 0 4px 12px rgba(0,0,0,.2); animation: toast-in .15s ease-out; }
-.toast.success { background: var(--color-success); color: #fff; }
-.toast.error   { background: var(--color-danger); color: #fff; }
-.toast.warning { background: var(--color-warning); color: #fff; }
-@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+const STORAGE_KEY = 'hotel-content-store'
+
+function loadInitial(): Hotel[] {
+  try {
+    const cached = localStorage.getItem(STORAGE_KEY)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  return initialHotels
+}
+
+export function useHotelStore() {
+  const [items, setItems] = useState<Hotel[]>(loadInitial)
+  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) }, [items])
+
+  const create = useCallback((data: Omit<Hotel, 'id'>) => {
+    const id = `h-${Date.now()}`
+    setItems(prev => [{ id, ...data, firstInsertDatetime: new Date().toISOString(), lastUpdateDatetime: new Date().toISOString() }, ...prev])
+    return id
+  }, [])
+
+  const update = useCallback((id: string, patch: Partial<Hotel>) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, ...patch, lastUpdateDatetime: new Date().toISOString() } : it))
+  }, [])
+
+  const remove = useCallback((id: string) => {
+    setItems(prev => prev.filter(it => it.id !== id))
+  }, [])
+
+  const reset = useCallback(() => { setItems(initialHotels); localStorage.removeItem(STORAGE_KEY) }, [])
+
+  return { items, create, update, remove, reset }
+}
 ```
 
-Tiny JS helper:
+For features with multiple entities (hotels + vendors + mappings), create one store per entity.
 
-```html
-<div class="toast-host" id="toasts"></div>
-<script>
-  function showToast(msg, kind) {
-    const el = document.createElement('div');
-    el.className = 'toast ' + (kind || '');
-    el.textContent = msg;
-    document.getElementById('toasts').appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+## Step 8 — Generate components
+
+### 8a. Admin shell (`src/components/AdminShell.tsx`)
+
+Wraps every page in the standard sidebar + topbar + tab bar layout described in the previous static prototype-builder. Use shadcn `Sheet` for collapsible mobile sidebar; on desktop just render the full sidebar inline.
+
+Brand logo: `<img src="/header-logo-white.png" />` — copy `{themeDir}/assets/images/common/<brand-logo-filename>` to `public/` so Vite serves it.
+
+Render all 8 menu groups + Favorites section per `knowledge/<framework>.md`. Mark guessed items with `[GUESSED]` chip.
+
+### 8b. Feature page (`src/pages/<Feature>List.tsx`)
+
+The main browse/list screen. Composition:
+
+1. Filter card with shadcn Form fields (use react-hook-form for the filter form too)
+2. Toolbar with action buttons (each opens a dialog via `useState<DialogId | null>(null)`)
+3. shadcn `Table` rendering store items, with horizontal scroll wrapper
+4. Pagination
+5. Footer (Grid Save / Grid Reset)
+
+### 8c. Dialog components
+
+For each dialog in `dialog-detection.json` `dialogsByRoute[<feature>]`, generate a separate component file:
+
+```tsx
+// src/components/dialogs/HotelMasterDialog.tsx
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { hotelMasterSchema, type HotelMasterForm } from '@/lib/schemas'
+import { toast } from 'sonner'
+import { useHotelStore } from '@/store/useHotelStore'
+import { type Hotel } from '@/mocks/hotels'
+
+interface Props {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initial?: Hotel       // when editing existing
+}
+
+export function HotelMasterDialog({ open, onOpenChange, initial }: Props) {
+  const store = useHotelStore()
+  const form = useForm<HotelMasterForm>({
+    resolver: zodResolver(hotelMasterSchema),
+    defaultValues: initial ?? {
+      hotelCode: '', hotelNameEn: '', hotelNameKo: '',
+      // ...
+    },
+  })
+
+  const onSubmit = (data: HotelMasterForm) => {
+    if (initial) {
+      store.update(initial.id, data)
+      toast.success(`Saved hotel ${data.hotelCode}`)
+    } else {
+      const id = store.create(data as any)
+      toast.success(`Created hotel ${data.hotelCode}`)
+    }
+    onOpenChange(false)
   }
-</script>
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initial ? `Hotel Master — ${initial.hotelCode}` : 'New Hotel'}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <Tabs defaultValue="basic">
+              <TabsList>
+                <TabsTrigger value="basic">Basic</TabsTrigger>
+                <TabsTrigger value="description">Description</TabsTrigger>
+                <TabsTrigger value="photo">Photo</TabsTrigger>
+                <TabsTrigger value="vmapping">V.Mapping List</TabsTrigger>
+                <TabsTrigger value="region">Region Lists</TabsTrigger>
+              </TabsList>
+              <TabsContent value="basic" className="grid grid-cols-3 gap-4">
+                {/* render every form field from source's hotel-detail-master.component.html */}
+                <FormField name="hotelCode" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Hotel Code *</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {/* ... */}
+              </TabsContent>
+              {/* other tabs */}
+            </Tabs>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button type="submit">Save</Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}
 ```
 
-Wire submit / delete / cancel buttons inside dialogs (or anywhere) to call `showToast('Saved successfully', 'success')` then close the modal.
+Rules from earlier static-prototype guidance still apply:
+- Render EVERY form field from source — don't curate
+- 5 hotel-name locale columns when source has them
+- Dialogs are overlays, never separate routes
+- Status as plain colored text (not pill badges) for admin systems
 
-### Admin-system component recipes
+### 8d. App entry (`src/App.tsx`, `src/main.tsx`)
 
-When the admin shell is active (Step 5b), render brief components with these patterns instead of generic Tailwind cards:
+Wire react-router with a single route per page (most admin features have 1-2 pages; the rest is dialogs):
 
-- **Table (k-grid)** — wrap in `<div class="k-grid"><div class="k-grid-scroll"><table>`. Header `<th>` cells use light grey bg, separated by 1px right border. Each body row uses **two lines per cell** — the primary value first, then a `<span class="row-line2">` with smaller muted secondary info (e.g. `BK-2026-0142` line 1, `1128814857440366` line 2). For multi-select tables, the first column is a 36px-wide checkbox. Booking IDs in the first column are rendered as `<a class="booking-id">` (underlined primary-darken).
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router'
+import { Toaster } from 'sonner'
+import HotelContentList from '@/pages/HotelContentList'
 
-- **Status columns — plain colored text, NOT badges.** oh-admin and most enterprise admins display "Confirmed", "Reserved", "Cancelled(Replied)" as bold colored text inline, not as pill badges:
-  ```html
-  <span class="status-confirmed">Confirmed</span>
-  <span class="status-cancelled">Cancelled(Replied)</span>
-  ```
-  Reserve `<span class="badge">` strictly for tag-like labels (e.g. status filter chips), never for inline status display. Default to plain colored text and only switch to badges when the user explicitly asks.
-
-- **Payment status pattern** — when a row has Booking Status + Payment Status, the payment cell often shows two stacked checkbox-prefixed lines (`☐ Not Paid`, `☑ Paid`) for the two payment legs. Use `<span class="status-paid-not">` and `<span class="status-paid">` for these.
-
-- **Filters / search bar** — flat region with `<div class="filter-area">` + `<div class="filter-grid">` using a labeled grid (`90px 240px 90px 240px 90px 240px`). Search/Reset buttons absolute-positioned top-right via `<div class="filter-actions">`. Add a centered chevron-down at bottom for "more filters".
-
-- **Grid toolbar** — `<div class="grid-toolbar">` with a left `<span class="grid-count">` (just the number, bold, large) and right `<div class="grid-toolbar-actions">` (page-size select + bulk actions).
-
-- **Pagination** — `<div class="pagination">` with `«`, `‹`, page numbers (one `.page-num.active`), `›`, `»`, ellipsis "..." for skipped ranges, and a right-anchored `<span class="summary">1 - 20 of 539 items</span>`.
-
-- **Footer actions** — `<div class="page-footer">` with right-aligned secondary buttons like Grid Save / Grid Reset.
-
-- **Stat cards** for results screens — three or four `<div class="card stat-card">` blocks each with `<span class="stat-label">` (small grey) + `<span class="stat-value">` (large bold). Color the value with `--color-success` or `--color-danger` based on intent.
-
-- **Alert banners** — `<div class="alert alert-info|alert-success|alert-warning">` with a Lucide icon + message. Border-left 3px solid.
-
-- **Summary panels** — for confirm screens, render a 2-column layout `style="grid-template-columns: 2fr 1fr"`: detail table on the left, summary card on the right with stat-style key→value pairs.
-
-- **Per-row actions** in result tables — the last column is "Action(s)" with text links: `<a class="btn-link">Xem chi tiết</a>`. Avoid filled buttons inside grid rows.
-
-The goal is dense admin UI: small fonts (`var(--font-size-xs)` ≈ 12px), tight padding, lots of information per screen, two-line rows in grids, plain text status indicators.
-- Render CTAs as styled buttons. `action: "navigate:<id>"` becomes a link to that screen. `action: "submit"` shows an alert/toast then navigates to the next screen in `flow`.
-
-### Icon rules (no emojis — ever)
-
-The prototype must NEVER use emoji characters (✅, ⚠️, 🎉, 🔥, etc.) for any visual indicator. They render inconsistently across OSes and look unprofessional in stakeholder demos.
-
-**Match the source product's icon library.** Read `manifest.stack.iconLibrary` (or `icon-detection.json` `iconLibrary` field) and use that library in the prototype:
-
-| `iconLibrary` value | CDN to load in `<head>` | How to render an icon |
-|---|---|---|
-| `fontawesome` | `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">` | `<i class="fas fa-<name>"></i>` |
-| `lucide` (default fallback) | `<script src="https://unpkg.com/lucide@latest"></script>` + call `lucide.createIcons()` | `<i data-lucide="<name>"></i>` |
-| `material-icons` | `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">` | `<span class="material-icons"><name></span>` |
-| `heroicons` | (no CDN — copy SVG inline) | `<svg>...</svg>` from heroicons.com |
-| `phosphor` | `<link href="https://unpkg.com/@phosphor-icons/web@2/src/regular/style.css" rel="stylesheet">` | `<i class="ph ph-<name>"></i>` |
-| `primeicons` | `<link href="https://unpkg.com/primeicons/primeicons.css" rel="stylesheet">` | `<i class="pi pi-<name>"></i>` |
-| `tabler` | `<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">` | `<i class="ti ti-<name>"></i>` |
-| `custom-svg` / `custom-png` | (no CDN) | `<img src="assets/images/icons/ico-<name>.svg">` — use icon paths from `manifest.assetsManifest` |
-| `none` | Lucide fallback | Same as `lucide` row |
-
-When `manifest.stack.iconLibrary === "fontawesome"` and the source's templates use `fa-desktop`, `fa-hotel`, `fa-plane-departure` (visible in `icon-detection.json` `iconSamples`), use those exact icon names in the prototype. Don't translate to a different library.
-
-**Brand logo:** Read `manifest.brand.logo` (e.g. `src/assets/images/common/header-logo-white.png`). When this exists AND `manifest.assetsManifest` confirms the file was copied into `assets/`, render it as `<img src="assets/images/common/header-logo-white.png" class="page-logo-img" alt="Brand logo">` instead of inline text. Fall back to a styled text logo only when no logo image is detected.
-
-**Lucide icon name mapping** (use only when iconLibrary is `lucide` or `none`):
-
-| Intent | Lucide name |
-|---|---|
-| Success / done | `check-circle-2` |
-| Error / failure | `x-circle` |
-| Warning | `alert-triangle` |
-| Info | `info` |
-| Loading | `loader-2` (animate with `class="animate-spin"`) |
-| Back / previous | `arrow-left` |
-| Next / forward | `arrow-right` |
-| Close / dismiss | `x` |
-| Add / create | `plus` |
-| Edit | `pencil` |
-| Delete | `trash-2` |
-| Search | `search` |
-| Filter | `filter` |
-| User | `user` |
-| Calendar / date | `calendar` |
-| Time | `clock` |
-| Empty / nothing | `inbox` |
-| Settings | `settings` |
-| Money / payment | `wallet` |
-| Booking / reservation | `bookmark-check` |
-
-For any other concept, pick a Lucide name that fits — full list at https://lucide.dev/icons. If you cannot find a matching icon, omit the icon (do NOT fall back to emoji).
-
-For the `react-vite` template, use `lucide-react` (`import { CheckCircle2 } from 'lucide-react'`).
-
-### Link-path rules (critical — easy to get wrong)
-
-The first screen in `flow` lives at `index.html`; every other screen lives at `pages/<id>.html`. When you write a link **from page X to page Y**, the path depends on where X and Y are:
-
-| From X (location) | To Y (location) | href to use |
-|---|---|---|
-| `index.html` | `index.html` | `./index.html` |
-| `index.html` | `pages/Y.html` | `./pages/Y.html` |
-| `pages/X.html` | `index.html` | `../index.html` |
-| `pages/X.html` | `pages/Y.html` | `./Y.html` |
-
-Apply this to **every** cross-screen link: CTAs, the Prototype Navigator, and "submit" actions. Test each link by mentally resolving it from the file's directory before writing — broken links break the demo.
-
-## Step 5 — Wire navigation
-
-Add a small "Prototype Navigator" floating widget to every screen so reviewers can jump between screens out-of-order. It lists every screen by title with a click-to-navigate.
-
-For `html-tailwind`, this is a fixed-position `<nav>` injected at the bottom of `<body>`. The nav links must follow the link-path rules above — re-derive the `href` per file, not once globally.
-
-For `react-vite`, this is a `<PrototypeNav />` component rendered in the layout. React-router handles paths so no per-file rewriting needed.
-
-## Step 5b — Admin shell (when target is an admin/dashboard system)
-
-Read `{themeDir}/source-manifest.json` if `themeBranch === "real-system"`. When `stack.uiLib` is one of `kendo`, `material`, `antd`, `chakra` — OR when the original framework is Angular/Vue with no UI library AND the imported tokens include `--color-sidebar-bg` — wrap every screen in a full admin layout instead of the centered single-column layout.
-
-### Admin shell anatomy (verified against oh-admin)
-
-A faithful admin shell has SEVEN regions, top to bottom:
-
-1. **Topbar (50px)** — hamburger toggle on the left, then a flex spacer pushing everything right: language switcher, optional product link ("ELLIS Playbook"-style), user pill (e.g. "TOM (90049)"), action links (Change Password, Logout), then a small round avatar at the far right. Page title does NOT live in the topbar.
-
-2. **Tab bar (~36px)** — admin systems with a multi-tab workspace render the open feature as a tab card just under the topbar (e.g. "★ Hotel Bookings ✕"). The tab uses the page background (slightly off-white) with rounded top corners. When the source uses tabs, render this; do NOT put the page title in the topbar — the tab IS the title.
-
-3. **Filter area** — flat, NO card border, sits directly on white with a bottom border. Layout is a labeled grid (typically `90px 240px 90px 240px 90px 240px` for label/input pairs). Search and Reset buttons absolute-positioned top-right of the area. A tiny "expand" chevron at the bottom-center signals collapsible filters.
-
-4. **Grid toolbar** — a left summary count (e.g. plain bold "539") + right action cluster (Booking List / Data Download / "20 ▼" page-size). NOT centered, NOT in a card.
-
-5. **Data grid** — `.k-grid` table with a light grey header row, single-row body cells where each cell contains a primary line + a secondary line (the `.row-line2` class) with smaller muted text. Status columns use plain colored TEXT, not pill badges (`.status-confirmed`, `.status-cancelled` etc.). Booking IDs are underlined links in the primary color.
-
-6. **Pagination** — centered numeric pagination with `« ‹ 1 2 3 ... 10 ... › »` and a right-aligned `1 - 20 of 539 items` summary text.
-
-7. **Footer actions** — small button row aligned right with grid-management actions like "Grid Save / Grid Reset". Distinct from the page content area.
-
-When generating an admin screen, use these regions verbatim — each one is what makes the prototype "feel" like a real admin system rather than a marketing site.
-
-### Sidebar — use real menu data when available
-
-Read `manifest.stack.routes` from the source manifest. When non-empty, that's a list of folder names from the source app's routes directory (e.g. `ho-hotel-contents`, `bs-menu`, `av-reservation-list-ota`). Use them to seed realistic menu labels — strip the 2-letter domain prefix and convert to Title Case:
-
-| folder name | menu label |
-|---|---|
-| `ho-hotel-contents` | Hotel Contents |
-| `bs-menu` | Menu |
-| `av-reservation-list-ota` | Reservation List (OTA) |
-| `sm-seller` | Seller |
-
-Group menu items by their prefix (`ho-` → Hotels, `bs-` → System / Common, `av-` → Reservations, `sm-` → Sellers, `ad-` → Dashboard, `ac-` → Payments). Pick the most-relevant 8–12 for the visible Favorites list, then nest the rest under collapsible groups (Bookings → Common / Flights / Hotels / Cars).
-
-When `manifest.stack.routes` is empty/missing, ask the user for the menu structure or fall back to a generic 5-item list.
-
-### Sidebar — search box
-
-Admin sidebars often include a menu-search input (`Enter the menu name.`) at the top under the logo. Render this when the imported manifest's `stack.uiLib` is `kendo` or when `routes.length > 30` (long menus need search).
-
-### Layout structure (HTML)
-
-```html
-<body>
-  <div class="layout">
-    <aside class="page-sidebar">
-      <div class="page-logo">
-        <span class="logo-cyan">◐</span>
-        <span>{ALL-CAPS BRAND NAME}<span class="logo-cyan">&</span>{SECOND-WORD}</span>
-      </div>
-
-      <div class="nav-search">
-        <div class="nav-search-wrap">
-          <input type="search" placeholder="Enter the menu name." />
-          <i data-lucide="search" class="w-3 h-3"></i>
-        </div>
-      </div>
-
-      <div class="nav-section">
-        <div class="nav-section-title">
-          <i data-lucide="star" class="w-3 h-3 star"></i>
-          <span>Favorites</span>
-        </div>
-        <ul class="nav-menu">
-          <!-- mark the current feature with class="active has-dot" -->
-          <li class="active has-dot"><a href="#"><span>{Real menu item from routes}</span></a></li>
-          ...
-        </ul>
-      </div>
-
-      <div class="nav-group expanded">
-        <div class="nav-group-title">
-          <i data-lucide="monitor" class="w-3 h-3"></i>
-          <span>{Domain group, e.g. Bookings}</span>
-          <i data-lucide="chevron-down" class="w-3 h-3 chev"></i>
-        </div>
-        <!-- nested subgroups with chevron toggles -->
-      </div>
-    </aside>
-
-    <div class="main">
-      <header class="page-header">
-        <div class="hamburger"><i data-lucide="menu" class="w-4 h-4"></i></div>
-        <div class="topbar-spacer"></div>
-        <a class="topbar-link" href="#"><i data-lucide="globe" class="w-3 h-3"></i> English</a>
-        <a class="topbar-link" href="#"><i data-lucide="book-open" class="w-3 h-3"></i> {Product link}</a>
-        <span class="topbar-divider"></span>
-        <span class="user-pill">{User name (ID)}</span>
-        <a class="topbar-link" href="#">Change Password</a>
-        <a class="topbar-link" href="#">Logout</a>
-        <div class="user-avatar"></div>
-      </header>
-
-      <div class="tab-bar">
-        <div class="tab active">
-          <span class="tab-star">★</span>
-          <span>{Tab title — same as Favorites label}</span>
-          <span class="tab-close"><i data-lucide="x" class="w-3 h-3"></i></span>
-        </div>
-      </div>
-
-      <!-- filter area + grid toolbar + .k-grid + pagination + page-footer -->
-    </div>
-  </div>
-  <!-- Prototype Navigator (existing) -->
-</body>
+export function App() {
+  return (
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HotelContentList />} />
+        </Routes>
+      </BrowserRouter>
+      <Toaster richColors position="bottom-right" />
+    </>
+  )
+}
 ```
 
-When the target is a customer-facing site (no admin signals — no Kendo/Material/AntD, no `--color-sidebar-bg`), keep the centered single-column layout from Step 4.
+## Step 9 — Build + verify
 
-## Step 6 — Write a README inside the prototype folder
-
-Create `{outputDir}/README.md` (in `workingLanguage`) with:
-
-- One-paragraph summary from `brief.summary`
-- How to run (`open index.html` for HTML, `npm install && npm run dev` for React)
-- Screen list with titles
-- Open questions from `brief.openQuestions`
-- A "What's next?" section pointing devs at where to plug in real APIs
-
-## Step 7 — Final report to parent
-
-Return a structured summary:
-
-```
-template: html-tailwind | react-vite
-theme branch: real-system | default
-files written: <count>
-entry: <relative path to open first>
-imported components: [<list>] | none
-fallback components: [<list of unknown names that fell back>]
-warnings: [<list>]
+```bash
+cd {outputDir}
+npm run build
+ls -la dist/
 ```
 
-Done.
+`vite-plugin-singlefile` produces `dist/index.html` containing CSS+JS+images inline. Open this file directly in a browser — should work without a server. Smoke test:
+
+1. Page loads without console errors
+2. Filter inputs accept text
+3. Toolbar buttons open the right dialog
+4. Submit a form with empty required fields → see validation errors
+5. Submit valid data → toast appears, modal closes, grid updates with new row
+6. Click row → edit dialog with prefilled data; save → row updates
+7. Refresh browser → data persists (localStorage)
+
+## Step 10 — README + final report
+
+Write `{outputDir}/README.md` with:
+- 3-line summary
+- `npm install`
+- `npm run dev` (development with HMR)
+- `npm run build` (production single-file output at `dist/index.html`)
+- Deploy: drag `dist/index.html` to Netlify Drop, Vercel CLI, or any static host
+- Reset state: in browser DevTools, run `localStorage.clear()` to start over
+
+Return to the parent skill:
+
+```
+output: {outputDir}
+single-file build: {outputDir}/dist/index.html
+mock entities: <list>
+form schemas: <list of zod schemas>
+dialogs: <count from dialog-detection>
+warnings: [...]
+```
+
+## Anti-patterns to refuse
+
+- "I'll skip the form validation hook for now and let the user submit anything" → NO. Without validation the prototype isn't a prototype, it's a wireframe.
+- "I'll inline mock data in each component" → NO. One source of truth per entity in `src/mocks/`.
+- "I'll alert() on submit instead of updating store" → NO. Submit must update the store and the grid must re-render.
+- "I'll render fewer columns to make it look readable" → NO. See knowledge/<framework>.md "Copy-from-source discipline".
+- "I'll skip the dialog and link to a /pages/edit URL instead" → NO. Source uses overlays; prototype uses overlays.
+- "I'll use faker for mock data" → NO. Hardcode 5-15 realistic records.
+- "I'll skip building because dev server works" → NO. The whole point is `dist/index.html` deployable.

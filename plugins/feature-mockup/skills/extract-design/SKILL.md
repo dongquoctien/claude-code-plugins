@@ -144,6 +144,18 @@ Now do the actual work, in this order:
    ```
    Scans all framework templates and component classes for dialog/modal/toast usage. Output is a per-feature map of every `<app-dialog>`, `<kendo-dialog>`, `<mat-dialog>`, `<p-dialog>`, `<el-dialog>`, `<v-dialog>`, `<a-modal>`, `<Dialog>`, `<DialogContent>`, `<Modal>` with header text and modal size, plus a global toast/alert call count and message samples. Verified on oh-admin: detected 272 dialogs across 101 feature routes, 1208 toast/alert calls. Critical for the prototype-builder so it renders dialogs as overlays (not separate pages) and includes toast/snackbar feedback after submit actions.
 
+2b3. **Validators.** Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-validators.mjs --in {projectRoot} --out {tmpDir}/validators-detection.json
+   ```
+   Extracts form-validation rules per feature route from Angular reactive form patterns (`Validators.required`, `Validators.email`, `Validators.min/max/pattern`), class-validator decorators (`@IsEmail`, `@MinLength`, `@Min`, `@IsNotEmpty`), and HTML attributes (`required`, `type=email`, `pattern=`, `minlength=`). The prototype-builder converts these into zod schemas for react-hook-form. Verified on oh-admin: 1129 fields, 1192 distinct rules across 100+ routes.
+
+2b4. **Mock data.** Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-mock-data.mjs --in {projectRoot} --out {tmpDir}/mock-data-detection.json
+   ```
+   Scans .ts files for hardcoded arrays of objects (status options, dropdown labels, enum lists) and parses them into JSON via a TS-aware literal parser. The prototype-builder seeds initial mock data from these arrays, then AI-supplements with realistic invented records to reach 5-15 rows per entity. No faker library — all mock data is hardcoded. Verified on oh-admin: 11 entities, 58 records auto-extracted.
+
 2c. **Source files — copy templates and components.** Run:
    ```bash
    node {pluginRoot}/scripts/crawl-source.mjs --in {projectRoot} --out {tmpDir}/source-copy
@@ -208,6 +220,8 @@ Now do the actual work, in this order:
        "sourceIndex": "source-index.json",
        "iconDetection": "icon-detection.json",
        "dialogDetection": "dialog-detection.json",
+       "validatorsDetection": "validators-detection.json",
+       "mockDataDetection": "mock-data-detection.json",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",
        "componentStylesRaw": "component-styles.raw.scss",
