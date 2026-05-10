@@ -103,6 +103,41 @@ When generating the admin shell:
 - Use FontAwesome icons matching each group's domain.
 - Even if the prototype only highlights ONE menu item as active, render the full 8 groups so the prototype looks like a real admin shell, not a stub.
 
+## Copy-from-source discipline — DO NOT simplify, DO NOT invent
+
+When you read a real Angular template (`*.component.html`) from `source-copy/`, every concrete element is GROUND TRUTH and must be reproduced **as-is** in the prototype. The most common failure mode for this plugin is "AI saw 17 columns in source but rendered 11 in prototype because the layout looked too dense" — that's a regression. The dev who wrote those 17 columns picked them deliberately.
+
+### Concrete rules
+
+**1. Kendo grid columns** — when source has:
+```html
+<kendo-grid-column field="hotelCode" title="호텔코드"></kendo-grid-column>
+<kendo-grid-column field="hotelNameEn" title="호텔이름(영어)"></kendo-grid-column>
+<kendo-grid-column field="hotelNameLn" title="호텔이름(한국어)"></kendo-grid-column>
+<!-- ... 14 more ... -->
+```
+Render ALL 17 columns. NOT a "representative subset". If the resulting grid is too wide for the prototype viewport, add `overflow-x: auto` to `.k-grid-scroll` — that's how the real product handles it. Translate Korean titles to the working language but keep the field column count exact.
+
+**Locale-suffixed columns**: `hotelNameLn` (Locale Name), `cityNameLn`, `countryNameLn`, `addressLn` — if the Angular service injects multiple locale variants at runtime (visible in the live site as `Hotel Name(EN)` + `Hotel Name(KO)` + `Hotel Name(JA)` + `Hotel Name(VI)` + `Hotel Name(ZH)`), render **all five** locale variants in the prototype. Read the data-service.ts (in routeGroups[].services) to see if multi-locale rendering is referenced. When in doubt, render 5 locale columns (EN/KO/JA/VI/ZH) for any `Ln`-suffixed field.
+
+**2. Form fields in component templates** — when source has `formGroupName="dateRange1"` followed by `formControlName="from"` + `formControlName="to"`, render BOTH fields with their exact names as `id` + `name` attributes. Don't reduce to one field "for brevity".
+
+**3. Toolbar buttons in `*-control.component.html`** — every `<button>` and `<app-button-print>` is a real action. Copy the COMPLETE list, not the "important ones". oh-admin's hotel-contents control has 8 buttons (New / Recommendation / Contents Mapping / Add Region / Delete Region / Hotel List / Room List / Data Download); render all 8.
+
+**4. Tabs in `*-detail.component.html`** — copy the exact tab labels from the template's `[ngClass]="{ active: tabIndex === N }"` blocks. oh-admin's hotel-detail has exactly 5 tabs (Basic / Description / Photo / V.Mapping List / Region Lists). Don't add or remove tabs.
+
+**5. Sidebar menu items** — `manifest.stack.routes` lists folder names but those are paths, not labels. Real menu labels come from a backend menu service or a hardcoded array in `src/app/layout/components/menu-group/...component.ts` or similar. Search for `menuList` / `navItems` / `menus` arrays in `source-copy/src/app/layout/...` BEFORE inventing labels. If you can't find a menu data source in source-copy, label as `[GUESSED] <route-name>` so the BA knows it's an inferred item, not authoritative.
+
+### Anti-patterns to refuse
+
+- "I picked the most important 8 of 17 columns to keep the prototype readable" → NO. Render all 17 with horizontal scroll.
+- "I simplified 5 locale columns down to EN/KO" → NO. Render all 5.
+- "I dropped the Latitude/Longitude columns because they're not user-facing" → NO. The dev put them there; they're user-facing.
+- "I invented 6 menu items based on routes folder names" → mark them `[GUESSED]` or skip — better to under-populate than show fake labels.
+- "I rendered fewer rows for brevity" → for grid sample data this is fine, but the column SCHEMA must be complete.
+
+The signal that you're slipping into this anti-pattern: you find yourself writing prose like "I curated", "I selected representative", "for brevity", "I simplified". STOP and copy-from-source instead.
+
 ## Dialog / modal patterns — most admin actions open overlays, not new pages
 
 Angular admins rarely use route-based navigation for create/edit/detail flows. Instead they have a **state-driven dialog pattern**:

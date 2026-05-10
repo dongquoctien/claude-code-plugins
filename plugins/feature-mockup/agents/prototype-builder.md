@@ -132,6 +132,14 @@ For each screen:
 
 For `EmptyState`, `Toast`, success/error indicators, or any visual ornament: use a Lucide icon (see icon rules above). Never use emoji.
 
+### Copy-from-source discipline (highest-impact rule)
+
+When you read a `*.component.html` from `source-copy/`, treat its element list as ground truth. **Do not curate, simplify, drop, or merge** elements to keep the prototype "readable". If the source has 17 grid columns, your prototype has 17 columns (use `overflow-x: auto`). If the source has 5 hotel-name locale columns, your prototype has 5. If the source has 8 toolbar buttons, render all 8.
+
+Read `knowledge/<framework>.md` ("Copy-from-source discipline" section) for framework-specific rules. The agent's #1 quality regression is invisible omissions where the AI thought a column was redundant — it isn't.
+
+If you find yourself writing internal reasoning like "I picked representative 8 of 17", STOP and render all 17 instead. Width problems are styling problems (add scroll), not column-count problems.
+
 ### Dialogs / modals / overlays — render as DOM overlays, not separate pages
 
 This is one of the easiest things to get wrong. When the source has a CTA that opens a dialog (e.g., "New Hotel" button → opens an `<app-dialog header="Hotel Master" modalSize="lg" [visible]="...">`), the prototype must NOT render that as a separate `pages/edit.html` navigation. Real users experience it as an overlay on the same page. Dropping the overlay loses the entire UX.
