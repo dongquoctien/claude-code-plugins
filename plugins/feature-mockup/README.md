@@ -47,8 +47,14 @@ cd <path-to-your-frontend-project>
 # 3. Make your first prototype — text + screenshots + docs in any combination
 /feature-mockup:make "<feature-name>" ./screenshots/some-screen.png ./refs/spec.md
 
-# 4. (Phase 3) Open the result in a browser
+# 4. Open the result in a browser
 /feature-mockup:preview "<feature-name>"
+
+# 5. (Optional) Compare prototype against the real admin or screenshots → gap report
+/feature-mockup:verify "<feature-name>"
+
+# 6. (Optional) Apply fixes from the report or describe issues yourself
+/feature-mockup:fix "<feature-name>"
 ```
 
 ## How it works
@@ -77,7 +83,9 @@ cd <path-to-your-frontend-project>
 | `/feature-mockup:make` | BA | Generate a prototype from a description + screenshots/docs |
 | `/feature-mockup:extract-design` | **Dev** | Crawl the front-end source and produce a zip for the BA (auto-detects Angular/React/Vue/Next) |
 | `/feature-mockup:ingest-theme` | BA | Import the dev's zip — tokens + component vocabulary |
-| `/feature-mockup:preview` | BA | Open the generated prototype in a browser (Phase 3) |
+| `/feature-mockup:preview` | BA | Open the generated prototype in a browser (auto-detects static vs vite dev server) |
+| `/feature-mockup:verify` | BA | Compare the prototype against the real admin (live URL via Chrome DevTools / Playwright MCP) or user screenshots, produce a prioritized gap report |
+| `/feature-mockup:fix` | BA | Apply UI + interaction fixes — from a verify report or free-form description, with theme-rule guardrails and per-batch user confirmation |
 
 ## What devs need to export (for `ingest-theme`, Phase 2)
 
@@ -94,7 +102,8 @@ Full spec: see `docs/fe-export-spec.md` (Phase 2).
 - **Phase 1 (shipped):** `init`, `make`, `html-tailwind` template, `input-analyzer` + `prototype-builder` agents. Lucide icons, no emoji.
 - **Phase 2 (shipped):** `ingest-theme` skill, `theme-extractor` agent, normalized tokens pipeline, component cloning with import rewriting, `docs/fe-export-spec.md`.
 - **Phase 2.5 (shipped):** `extract-design` skill (dev-side), `design-extractor` agent, stack detector (Angular / React / Vue / Next.js / Nuxt / Svelte), token crawlers for Tailwind / SCSS variables / CSS variables / Style Dictionary, component classifier (presentational / business / unknown).
-- **Phase 3 (planned):** `react-vite` template, `preview` skill.
+- **Phase 3 (shipped):** `preview` skill (browser auto-launch), `verify` skill (Chrome DevTools / Playwright MCP comparison), `fix` skill (UI + interaction fixes with theme guardrails).
+- **Phase 4 (planned):** per-library knowledge expansion (Kendo / AntD / MUI / Element Plus / shadcn / TanStack Table grid families), `react-vite` template revival.
 
 ## License
 
