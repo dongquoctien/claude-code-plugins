@@ -144,18 +144,6 @@ Now do the actual work, in this order:
    ```
    Scans all framework templates and component classes for dialog/modal/toast usage. Output is a per-feature map of every `<app-dialog>`, `<kendo-dialog>`, `<mat-dialog>`, `<p-dialog>`, `<el-dialog>`, `<v-dialog>`, `<a-modal>`, `<Dialog>`, `<DialogContent>`, `<Modal>` with header text and modal size, plus a global toast/alert call count and message samples. Verified on oh-admin: detected 272 dialogs across 101 feature routes, 1208 toast/alert calls. Critical for the prototype-builder so it renders dialogs as overlays (not separate pages) and includes toast/snackbar feedback after submit actions.
 
-2b3. **Validators.** Run:
-   ```bash
-   node {pluginRoot}/scripts/extract-validators.mjs --in {projectRoot} --out {tmpDir}/validators-detection.json
-   ```
-   Extracts form-validation rules per feature route from Angular reactive form patterns (`Validators.required`, `Validators.email`, `Validators.min/max/pattern`), class-validator decorators (`@IsEmail`, `@MinLength`, `@Min`, `@IsNotEmpty`), and HTML attributes (`required`, `type=email`, `pattern=`, `minlength=`). The prototype-builder converts these into zod schemas for react-hook-form. Verified on oh-admin: 1129 fields, 1192 distinct rules across 100+ routes.
-
-2b4. **Mock data.** Run:
-   ```bash
-   node {pluginRoot}/scripts/extract-mock-data.mjs --in {projectRoot} --out {tmpDir}/mock-data-detection.json
-   ```
-   Scans .ts files for hardcoded arrays of objects (status options, dropdown labels, enum lists) and parses them into JSON via a TS-aware literal parser. The prototype-builder seeds initial mock data from these arrays, then AI-supplements with realistic invented records to reach 5-15 rows per entity. No faker library — all mock data is hardcoded. Verified on oh-admin: 11 entities, 58 records auto-extracted.
-
 2c. **Source files — copy templates and components.** Run:
    ```bash
    node {pluginRoot}/scripts/crawl-source.mjs --in {projectRoot} --out {tmpDir}/source-copy
@@ -167,13 +155,21 @@ Now do the actual work, in this order:
 
    **Why this matters:** the BA usually doesn't have the dev's source repo. Without this step, `source-index.json` lists paths the BA's agent cannot resolve. Copying the actual files makes the export self-contained — the BA agent can `Read` any path it sees in `source-index.json`. Verified on oh-admin: 3074 files (1153 templates + 1157 components + 387 services + 362 modules) = 12.5 MB.
 
-3a. **Compile global SCSS partials → CSS.** Run:
+2d. **Form validators.** Run:
    ```bash
-   node {pluginRoot}/scripts/compile-scss.mjs --in {projectRoot} --out {tmpDir}/styles.compiled.css
+   node {pluginRoot}/scripts/extract-validators.mjs --in {projectRoot} --out {tmpDir}/validators.json
    ```
-   Compiles all global SCSS partials (`_layout.scss`, `_buttons.scss`, `_form.scss`, `_table.scss`, `_components.scss`, etc.) into a single CSS file with `$variables`, `darken()`, `@include`, and `@import` chains all resolved. The script uses the project's own `node_modules/sass` (found in 90% of Angular/Vue projects) for accurate compile, supports both modern `compileString` and legacy `renderSync` APIs. Falls back to raw concat with a warning when `sass` is unavailable. Output is the highest-fidelity stylesheet possible — every `.btn`, `.btn-primary`, `.page-sidebar`, `.k-grid` selector renders exactly as it does in the live product. Verified on oh-admin: 16 partials → 667 KB CSS with 8870 selectors.
+   Extracts per-field validation rules (Angular `Validators.required/email/min/max/pattern`, class-validator decorators `@IsEmail`/`@MinLength`/`@Min`/`@IsNotEmpty`, HTML5 attributes `required`/`type=email`/`pattern=`/`minlength=`). Output groups by feature route. The BA-side prototype embeds these rules in inline JS and runs them on form submit (alongside HTML5 native validation). Without this file, prototype forms accept any input and the demo doesn't realistically reject bad data. Verified on oh-admin: 1129 fields with 1192 rules across 100+ routes.
 
-   **Why this matters:** in v0.10.0 BA-side AI agents were given raw `.scss` files and expected to manually convert `$variables` to CSS values. That's error-prone (nested `darken()` calls, mixin expansion, etc.) and the prototype's visual fidelity suffered. By moving compilation to extract-design (DEV-side, where sass is available), the BA-side agent just `<link>`s the CSS directly. The interactive React+Vite prototype gets the EXACT visual styling of the live product on top of shadcn's interactivity.
+2e. **Mock data — seed records per entity.** Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-mock-data.mjs --in {projectRoot} --out {tmpDir}/mock-data.json
+   ```
+   Scans `*.ts` source files for hardcoded arrays of objects (status options, dropdown labels, enum lists, sample fixtures). The literal-array parser handles single-quoted strings, unquoted keys, `as Foo` casts, trailing commas. Output groups extracted entities per feature route.
+
+   **Why this matters for the prototype:** the BA wants to demo CRUD — Create / Read / Update / Delete with realistic-looking data. Source-extracted entities (status codes, vendor lists, region tiers) ARE realistic because the dev wrote them. Plus the prototype-builder agent supplements with 5-15 invented records per main entity to fill the grid for demo. The combined seed data goes into the prototype's inline `<script>` as `SEED_DATA`, then localStorage persists user mutations across reloads.
+
+   Verified on oh-admin: 11 entities, 58 records auto-extracted from service files (e.g. `contents-mapping-data.service.ts` exposes 62 mapping row labels — perfect for filling a Contents Mapping demo without inventing copy).
 
 3. **Component styles — gather then AI-clean.** Run:
    ```bash
@@ -228,9 +224,8 @@ Now do the actual work, in this order:
        "sourceIndex": "source-index.json",
        "iconDetection": "icon-detection.json",
        "dialogDetection": "dialog-detection.json",
-       "validatorsDetection": "validators-detection.json",
-       "mockDataDetection": "mock-data-detection.json",
-       "stylesCompiled": "styles.compiled.css",
+       "validators": "validators.json",
+       "mockData": "mock-data.json",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",
        "componentStylesRaw": "component-styles.raw.scss",
