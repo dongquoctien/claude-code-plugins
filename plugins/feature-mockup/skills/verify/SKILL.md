@@ -55,36 +55,111 @@ If user picks a backend that isn't installed, ask:
 
 > "{X} MCP is not detected in your environment. Would you like instructions to install it?"
 
-For Chrome DevTools MCP install:
-```
-1. Run: claude mcp add chrome-devtools npx @anthropic-ai/mcp-server-chrome-devtools
-2. Restart Claude Code
-3. Re-run /feature-mockup:verify
+For Chrome DevTools MCP install (Unix shell):
+```bash
+claude mcp add chrome-devtools -- npx -y @anthropic-ai/mcp-server-chrome-devtools
+# Then restart Claude Code and re-run /feature-mockup:verify
 ```
 
-For Playwright MCP install:
+For Chrome DevTools MCP install (PowerShell on Windows):
+```powershell
+claude mcp add chrome-devtools -- npx -y "@anthropic-ai/mcp-server-chrome-devtools"
+# Then restart Claude Code and re-run /feature-mockup:verify
 ```
-1. Run: claude mcp add playwright npx @playwright/mcp@latest
-2. npx playwright install chromium
-3. Restart Claude Code
-4. Re-run /feature-mockup:verify
+
+For Playwright MCP install (Unix shell):
+```bash
+claude mcp add playwright -- npx -y "@playwright/mcp@latest"
+npx playwright install chromium
+# Then restart Claude Code and re-run /feature-mockup:verify
+```
+
+For Playwright MCP install (PowerShell):
+```powershell
+claude mcp add playwright -- npx -y "@playwright/mcp@latest"
+npx playwright install chromium
+# Then restart Claude Code and re-run /feature-mockup:verify
 ```
 
 If user picks "neither installed", default to **user-provided screenshots** flow (Step 2 option 2).
 
-## Step 4 — Gather credentials (when live URL needs login)
+### MCP scope flag
 
-Ask the user, ONE question at a time, only the fields needed:
+If user is in a project-scoped Claude Code (per-repo settings), suggest adding `--scope project` to install at project level:
+```bash
+claude mcp add --scope project chrome-devtools -- npx -y @anthropic-ai/mcp-server-chrome-devtools
+```
+Otherwise default `user` scope is fine.
+
+## Step 4 — Gather credentials + auth strategy (when live URL needs login)
+
+First, classify the auth type by asking:
+
+> "What auth type does the admin use?"
+
+Use `AskUserQuestion` with:
+1. **Form login** — username + password on a login page (most common admin auth)
+2. **SSO / OAuth** — e.g. Google / Azure AD / Okta / SAML — redirects to identity provider
+3. **MFA / OTP** — form login + second factor (TOTP code, SMS, push approval)
+4. **API token / JWT** — set via header or cookie, no UI login flow
+5. **Already logged in** — user has an existing browser session, skip login entirely
+6. **No auth** — public admin URL
+
+### 4a. Form login flow
 
 1. > "What is the admin URL to compare against? (e.g. `https://admin.example.com`)"
-2. > "Does the admin require login? (yes / no)"
-3. If yes: > "Provide the login URL (default: same URL with `/login`)?"
-4. If yes: > "Username/email for login?"
-5. If yes: > "Password for login? (will only be used in this session, not saved)"
-6. > "Which path/route should I navigate to for the comparison? (e.g. `/admin/hotels`, `/booking-list`)"
-7. > "Any preconditions before screenshot? (e.g. 'click Search button first', 'select date range')"
+2. > "Login URL? (default: `{baseUrl}/login`)"
+3. > "Username/email field selector or label? (e.g. `#email`, `input[name='username']`, label `Email`)"
+4. > "Username/email value?"
+5. > "Password field selector? (default: `input[type='password']`)"
+6. > "Password value? (used only in this session, not saved to disk or logs)"
+7. > "Submit button selector? (default: `button[type='submit']`)"
+8. > "Path to navigate after login for comparison? (e.g. `/admin/hotels`)"
 
-**Never persist credentials to disk.** Use them only within this skill session. Mention this to the user.
+### 4b. SSO flow
+
+> "SSO requires interactive consent. I'll open the login page and pause. You complete login in the spawned browser, then return here and reply 'continue'. Confirm?"
+
+If user agrees, the MCP opens the login URL in a NON-headless window (Playwright's `launch({ headless: false })` or Chrome DevTools' visible mode), waits for the user to manually complete auth, then resumes. After 5 minutes of no progress, ask again.
+
+### 4c. MFA / OTP flow
+
+Same as 4a + after submit, pause:
+> "Submit form complete. Now provide the OTP code from your authenticator: ____"
+
+Fill the OTP field, submit. If MFA uses push notification (Okta Verify, Duo), use SSO flow (4b) instead.
+
+### 4d. API token / JWT flow
+
+> "Provide the token (will be sent as `Authorization: Bearer <token>` OR set as a cookie — confirm which)?"
+
+Ask whether the token goes in:
+- HTTP header `Authorization: Bearer <token>`
+- Cookie name `<cookieName>`
+- localStorage key `<key>`
+
+Then `mcp__playwright__browser_evaluate` to set the storage/cookie BEFORE navigation, OR pass headers to `navigate_page` if MCP supports.
+
+### 4e. Already-logged-in flow
+
+> "Provide the cookie value(s) or session ID that authenticate your existing browser session. Inspect via DevTools → Application → Cookies."
+
+User pastes cookie string (e.g. `JSESSIONID=abc123; CSRF-TOKEN=xyz`). MCP sets cookies before navigation.
+
+Alternative: > "Or provide the path to a Playwright `storage-state.json` file exported from your existing browser (run `playwright codegen --save-storage`)."
+
+### 4f. No auth
+
+Skip all credential prompts. Proceed directly to Step 5.
+
+### Common to all paths
+
+Always ask:
+> "Any preconditions before screenshot? (e.g. 'click Search button', 'select date range from 2024-01 to 2024-12', 'open the Edit dialog for the first row')"
+
+User describes preconditions in natural language. Translate to MCP click/fill/select calls — confirm with user if ambiguous.
+
+**Never persist credentials to disk.** Mention this explicitly. Don't write them to logs, reports, or temp files. After the session ends, they're gone.
 
 ## Step 5 — Capture reference screenshots
 
@@ -120,34 +195,70 @@ Read `{featureDir}/brief.json`. Find `inputs[]` entries with `kind: "image"`. Co
 
 ## Step 6 — Capture prototype screenshots
 
-The prototype is at `{featureDir}/index.html` (static) or running on a dev server.
+The prototype's framework is detected the same way as the `/preview` skill (Step 2 of preview): inspect `featureDir` for `next.config.*`, `nuxt.config.*`, `astro.config.*`, `angular.json`, `svelte.config.*`, `vite.config.*`, `gatsby-config.*`, `webpack.config.*`, or just `index.html`.
 
-### Static (html-tailwind)
+### Static (html-tailwind / index.html at root)
 
 Use the same MCP backend:
 ```
 1. navigate_page → file:///{abs-path}/index.html
 2. take_screenshot at 1440x900 → {featureDir}/.verify/prototype-desktop.png
-3. For each pages/*.html → screenshot if user wants multi-page comparison
+3. Read brief.json for the flow array; for each pages/{id}.html in the flow,
+   navigate + screenshot if user wants multi-screen comparison
 ```
 
 If MCP is unavailable, ask user:
-> "Open `{featureDir}/index.html` in your browser, take a screenshot, then drop it here."
+> "Open `{featureDir}/index.html` in your browser, take a screenshot for each screen in the flow, then drop them here."
 
-### Vite
+### Dev-server frameworks (vite / next / nuxt / astro / angular / sveltekit / remix / gatsby / webpack)
 
-If a dev server is required, ask user:
-> "Run `/feature-mockup:preview {feature}` first to start the dev server, then come back and re-run /feature-mockup:verify."
+Check whether a dev server is already running for this prototype:
+1. Look for prior `/preview` background bash by checking `BashOutput`/`TaskList` for matching `featureDir`
+2. If running, get URL from its captured stdout
+3. If not running, ask:
+   > "Need to start the dev server first. Should I run `/feature-mockup:preview {feature}` for you, or have you already started it on another terminal? If yes, what URL?"
+
+When user has it running, navigate the MCP to that URL. When they don't, defer to `/preview` and ask them to re-run `/verify` afterwards (avoids double-spawning servers).
+
+### Multi-screen flow comparison
+
+When `brief.json` has `flow.length > 1`, ask:
+> "This prototype has {N} screens in flow ({list}). Capture screenshots of all screens, or just the entry?"
+
+For "all screens":
+- Static: navigate to each `pages/{id}.html` (or `index.html` for the first entry), screenshot each, name `prototype-{flow-position}-{id}.png`.
+- Dev-server: navigate to corresponding routes per framework convention. Read `brief.routes` if present, else infer from screen IDs. Same naming.
+- Reference (live admin): for each prototype screen, ask user the corresponding live admin URL/path. Capture matching reference screenshots `reference-{flow-position}-{id}.png`.
+
+The comparison agent (Step 7) gets paired screenshots and compares per-screen.
+
+### Responsive viewports
+
+By default capture desktop only (1440x900). Ask:
+> "Compare responsive layouts too? (desktop only / + tablet 768 / + mobile 375 / all three)"
+
+For each chosen viewport, capture both reference and prototype, suffix filenames with `-desktop`, `-tablet`, `-mobile`.
 
 ## Step 7 — Run comparison agent
 
-Use the `Task` tool with the **general-purpose** subagent:
+Use the `Task` tool with the **general-purpose** subagent. **Pass framework context** so the agent compares correctly (Angular component class names != React JSX class names != Vue scoped class names):
 
 ```
 Reference screenshot(s):  {featureDir}/.verify/reference-*.png
 Prototype screenshot(s):  {featureDir}/.verify/prototype-*.png
 Brief:                    {featureDir}/brief.json
 Theme dir:                .claude/feature-mockup/theme (if imported)
+Source framework:         {manifest.stack.framework}  (read from theme/source-manifest.json)
+UI library:               {manifest.stack.uiLib}      (kendo / antd / mui / element-plus / shadcn / none)
+Prototype template:       {prototype-framework}       (static-html / vite / next / nuxt / etc)
+Extract artifacts:
+  - validators.json       (per-field validation rules from source)
+  - events.json           (handler → action chain map)
+  - dialog-detection.json (modals + toasts inventory)
+  - route-patterns.json   (filter grids + cell two-line + prefix groups)
+  - mock-data.json        (entity records)
+  - i18n.json             (locale labels) [if present]
+Source-copy/ root:        {themeDir}/source-copy (real source files)
 
 Goal:
   Produce {featureDir}/.verify/report.md with sections:

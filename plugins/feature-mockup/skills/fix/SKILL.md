@@ -129,43 +129,142 @@ For each fix, validate against design system rules:
 
 When user explicitly says "I want it different from the rule" (e.g. "yes, use the bigger font for this one specific button"), respect that — but log the deviation in the final report.
 
-## Step 6 — Execute fixes
+## Step 6 — Execute fixes (per prototype framework)
 
-For each confirmed fix, do the minimum edit needed:
+**First, detect prototype framework** (same logic as `/preview` Step 2):
 
-### UI/visual fixes
-- Use `Edit` to change CSS values, class attributes, HTML structure
-- For colors: prefer CSS variable if theme imported; literal hex otherwise
-- For spacing: use rem/px consistent with existing values
+| Detection | Edit target type |
+|---|---|
+| `index.html` at root, no `package.json` | static HTML + inline `<style>` + inline `<script>` |
+| `next.config.*` | TSX/JSX components in `app/` or `pages/`, CSS modules or Tailwind, `globals.css` |
+| `nuxt.config.*` | Vue SFC in `pages/` + `components/`, scoped `<style>` blocks |
+| `astro.config.*` | `.astro` files (HTML-like + frontmatter), can embed React/Vue/Svelte |
+| `angular.json` | `*.component.html` templates + `*.component.ts` + `*.component.scss` |
+| `svelte.config.*` | `.svelte` files (template + `<script>` + `<style>`) |
+| `vite.config.*` | depends on imports — React JSX or Vue SFC |
+| `gatsby-config.*` | React JSX |
+
+Each target type has different syntax — apply the right edit pattern.
+
+### UI/visual fixes — per framework
+
+| Framework | Edit pattern |
+|---|---|
+| static HTML | Edit `class="..."` attribute or inline `<style>` block |
+| React/Next.js | Edit `className="..."` (NOT `class=`) — JSX requirement |
+| Vue SFC | Edit `class="..."` in `<template>` OR `:class="{ ... }"` for dynamic |
+| Svelte | Edit `class="..."` OR `class:active={cond}` for conditional |
+| Angular | Edit `class="..."` in `*.component.html` OR `[ngClass]="..."` for dynamic; for color tokens edit the component's `*.component.scss` or `:host { ... }` |
+| Astro | Edit `class="..."` (HTML-like) OR `class:list={[...]}` syntax |
+
+For colors when theme imported: prefer CSS variable (`var(--color-danger)`) over literal hex. For spacing: use existing rem/px scale found in theme.css.
 
 ### Content fixes (missing labels / fields / columns)
-- Read the source-copy/ file the gap references
-- Copy the exact label/structure into the prototype HTML
-- For tables: insert `<th>` + `<td>` at the right index
-- For forms: insert `<label>` + `<input>` with id/name matching source
 
-### Interaction fixes
-- Validation: read validators.json `<route>.<field>` rules → emit JS validator + HTML5 attributes
-- Event handlers: read events.json `<route>.handlers.<name>.actions` → emit vanilla JS function with action chain (toast / dialog-close / store mutation)
-- Form binding: ensure `id`/`for`/`name` attribute consistency
+- Read the source-copy/ file the gap references (Angular `*.component.html`, React `*.tsx`, Vue `*.vue`, Svelte `*.svelte`)
+- Copy the exact label/structure into the prototype, **adapting syntax to prototype's framework**:
 
-### Theme fixes
-- When user explicitly opts to override theme tokens, edit `{themeDir}/theme.css` and add an override variable
-- Note this in the final report
+| Source → Prototype | Translation |
+|---|---|
+| Angular `*ngFor="let x of items"` → static HTML | Materialize loop with sample data inline |
+| Angular `{{ value }}` → static HTML | Replace with literal value |
+| Angular `[disabled]="cond"` → static HTML | Decide at edit time and hardcode `disabled` attr |
+| React `{items.map(i => <Row .../>)}` → React JSX | Keep as is, just add the new row to the items array |
+| React `{items.map}` → static HTML | Materialize with sample values |
+| Vue `v-for="item in items"` → Vue SFC | Keep as is in target SFC |
+| Vue `v-for` → static HTML | Materialize with sample values |
+| Svelte `{#each items as item}` → Svelte | Keep |
+| Svelte `{#each items as item}` → static HTML | Materialize |
 
-After each batch of edits, re-read the changed file briefly to verify (only when the edit was complex, not for simple value swaps).
+For tables: insert `<th>` + `<td>` at the right column index. Match column order from source-copy/. For forms: insert `<label>` + `<input>` with `id`/`for`/`name` matching source's `formControlName` (Angular), `name` attr (React/Vue), `name` (Svelte).
 
-## Step 7 — Smoke test
+### Interaction fixes — per framework
 
-Run a quick sanity check on the prototype:
+**Validation:** read `validators.json[<route>][<field>]` rules.
 
-1. **HTML validity**: scan for unclosed tags via regex (`<(\w+)[^>]*>` paired with `</\1>`). Surface obvious mismatches.
-2. **JS syntax**: extract inline `<script>` blocks, check for `Uncaught` patterns from common typos.
-3. **Class references**: every class used in the HTML should exist in the imported theme.css OR the prototype's own style block.
-4. **No emoji introduced**: grep for `[\u{1F300}-\u{1FAFF}]` — fail if any.
+| Prototype framework | Implementation |
+|---|---|
+| static HTML | Inline JS function + HTML5 attrs (`required`, `pattern`, `min`, `max`, `minlength`) |
+| React | `react-hook-form` + zod schema OR controlled state with manual validators OR HTML5 attrs |
+| Vue | VeeValidate + zod OR `:rules` for Element Plus / native attrs |
+| Svelte | Felte + zod OR Superforms (SvelteKit) OR native attrs |
+| Angular | Reactive form with `Validators.required`, `Validators.pattern(<regex>)`, etc. |
 
-When any check fails, print the issue and ask:
+For static prototypes, always emit BOTH HTML5 attribute (e.g. `required`, `pattern="..."`) AND JS-side check on submit (so the demo shows custom error messages).
+
+**Event handlers:** read `events.json[<route>].handlers[<name>].actions`.
+
+| Action kind | Static HTML | React JSX | Vue SFC | Svelte | Angular |
+|---|---|---|---|---|---|
+| `toast` | `showToast(msg)` helper | `toast.success(msg)` (sonner/shadcn-toast) | `ElMessage.success(msg)` (Element Plus) | toast helper | `MatSnackBar.open(msg)` |
+| `dialog-open` | `document.getElementById(id).hidden = false` | setState `setOpen(true)` for `<Dialog open>` | `dialogVisible.value = true` | bindable boolean | `MatDialog.open(...)` |
+| `dialog-close` | `.hidden = true` | `setOpen(false)` | `dialogVisible.value = false` | reset bindable | `dialogRef.close()` |
+| `http-post` (simulated) | localStorage mutation + setTimeout for "delay" | `useMutation` mock OR direct setState | `axios.post` mocked | fetch mocked | `HttpClient.post` mocked |
+| `navigate` | `window.location.href = '...'` | `router.push(...)` (Next/react-router) | `router.push(...)` (vue-router) | `goto(...)` (SvelteKit) | `Router.navigate(...)` |
+
+For static-html prototypes (most common), always use the vanilla JS column. For other framework prototypes, use the matching framework's pattern.
+
+**Form binding:** ensure `id`/`for`/`name` attribute consistency. For React, `htmlFor` instead of `for`. Other frameworks use `for`.
+
+### Theme fixes — per token source
+
+| Token source signature | Override location |
+|---|---|
+| `theme/theme.css` (`:root { --color-X }`) — html-tailwind import | Edit `{themeDir}/theme.css` and add override variable |
+| `globals.css` with shadcn-style `:root { --primary: 222 47% 11%; }` | Edit `globals.css` `--<token>` value |
+| `tailwind.config.{js,ts}` `theme.extend.colors` | Edit the config file's color value (requires rebuild for vite/next) |
+| Element Plus / Vuetify / PrimeVue theme | Override via SCSS variables file OR theme.json — ask user for project-specific path |
+| MUI theme provider | Edit the `createTheme({ palette: { ... } })` call site |
+
+When user opts to override:
+1. Identify the token source from theme dir / config file
+2. Apply override at the right location
+3. Note in final report whether the override needs a rebuild (yes for Tailwind config, no for CSS variable changes)
+
+### Re-read verification
+
+After complex edits (3+ lines changed in one Edit call), re-read the changed file briefly. For simple value swaps (single-line edits) skip re-read — Edit tool would have errored if it failed.
+
+## Step 7 — Smoke test (per framework)
+
+Run sanity checks appropriate to the prototype's framework:
+
+### Static HTML prototype
+1. **Tag balance**: count `<tagname[^/>]*>` opens vs `</tagname>` closes per non-self-closing tag (ignore `<br>`, `<img>`, `<input>`, `<hr>`, `<meta>`, `<link>`, `<source>`). Mismatches are likely real bugs.
+2. **JS parse**: extract inline `<script>` blocks, run `node --check -` on the concatenated content (pipe via Bash).
+3. **Class references**: grep `class="([^"]+)"` → for each class token, verify it's defined in either `theme.css` / `<style>` block / Tailwind utility set. Warn (not fail) on unknowns.
+4. **No emoji introduced**: grep for `[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]` in `index.html` and `pages/*.html`. Fail if any.
+5. **Broken cross-page links**: extract `href="..."` values, verify each target exists. Skip `http(s)://`, `mailto:`, `#anchor`.
+
+### React / Next.js prototype
+1. **Lint**: `npm run lint` if script exists; otherwise skip.
+2. **Type check**: `npm run typecheck` or `npx tsc --noEmit` if `tsconfig.json` present.
+3. **Build smoke**: `npm run build --dry-run` (if framework supports) — only when fix is structural.
+4. **className not class**: grep `class="` in `.tsx` files — flag as potential bug (JSX requires `className`).
+5. **No emoji introduced**: same as static.
+
+### Vue SFC prototype
+1. **`vue-tsc --noEmit`** if `vue-tsc` available.
+2. **Template syntax**: scan for unclosed `<template>`, `<script>`, `<style>` blocks per SFC.
+3. **No emoji**: same.
+
+### Svelte prototype
+1. **`svelte-check`** if available.
+2. **No emoji**: same.
+
+### Angular prototype
+1. **`ng build --configuration development --no-progress`** as smoke (slow but authoritative). OR skip and trust the Edit went through cleanly.
+2. **Template binding**: grep for `formControlName="X"` — verify X exists in the corresponding component class.
+3. **No emoji**: same.
+
+### Common to all frameworks
+- **Theme variable references**: grep `var\(--[\w-]+\)` → verify each `--name` is defined in the imported theme. Warn on unknowns.
+- **Lucide icon names**: grep `data-lucide="X"` (static) or `<X />` Lucide React imports → verify X is a known Lucide icon name (cross-check against https://lucide.dev/icons OR a snapshot list bundled in the plugin).
+
+When any check fails, print the issue summary and ask:
 > "Smoke test found {N} issues after fixes. Show details and let me try to repair?"
+
+Auto-repair is OK for trivial fixes (e.g. `class` → `className`); for ambiguous failures, surface to user and stop.
 
 ## Step 8 — Re-verify suggestion
 
