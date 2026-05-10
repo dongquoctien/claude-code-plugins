@@ -334,9 +334,15 @@ For features with multiple entities (hotels + vendors + mappings), create one st
 
 ## Step 8 — Generate components
 
-### 8.0 — When source is an admin system: use admin class names directly, NOT shadcn primitives
+### 8.0 — IF THEME IS IMPORTED, USE THE THEME (highest priority rule)
 
-**This is where v0.10 prototypes most often fail visual fidelity.** The export ships `styles.compiled.css` with 8000+ exact admin selectors (`.btn`, `.btn-primary`, `.input`, `.k-grid`, `.page-sidebar`, `.tabs-nav`, `.modal-titlebar`, `.pagination`). Use them DIRECTLY in JSX:
+**Principle:** When `manifest.files.stylesCompiled` exists in the imported theme, the BA has explicitly chosen to mirror the source product's design system. Falling back to shadcn / Tailwind defaults is a **violation of the BA's intent** — it's why they imported a theme in the first place.
+
+**Decision:** If `{themeDir}/styles.compiled.css` exists AND is non-trivial (>10 KB, 100+ selectors), the prototype's interactive React layer MUST render the theme's admin class names DIRECTLY in JSX. shadcn primitives are FORBIDDEN for any element that has an admin equivalent. The theme is the contract.
+
+**Audit before delivering:** grep your output for `data-slot="button"`, `data-slot="input"`, `data-slot="card"`, or wrapped `<Button>`, `<Input>`, `<Card>` imports. Each one is a violation. Replace with `<button className="btn btn-primary">`, `<div className="input"><input/></div>`, `<div className="card">...</div>`.
+
+The export ships `styles.compiled.css` with 8000+ exact admin selectors (`.btn`, `.btn-primary`, `.input`, `.k-grid`, `.page-sidebar`, `.tabs-nav`, `.modal-titlebar`, `.pagination`). Use them DIRECTLY in JSX:
 
 ```tsx
 // ✅ Admin classes from compiled CSS — visual matches source 1:1
@@ -358,9 +364,16 @@ For features with multiple entities (hotels + vendors + mappings), create one st
 <Card><CardContent>...</CardContent></Card>        // wrong: shadcn card shadow + radius wins
 ```
 
-**Rule of thumb:**
-- Source uses Tailwind / Material / Chakra → use shadcn primitives (cascade plays nice)
-- Source uses Bootstrap / custom admin SCSS / Kendo → **use the source's class names directly** from `styles.compiled.css`
+**Decision matrix — read manifest.stack.css FIRST:**
+
+| `stack.css` | `stylesCompiled` exists? | What to use |
+|---|---|---|
+| `tailwind` | small/empty | shadcn primitives — cascade works |
+| `tailwind` | large with admin classes | admin classes from compiled CSS |
+| `scss` / `css` (custom admin) | exists | **MANDATORY: admin class names directly. shadcn primitives forbidden.** |
+| `scss` / `css` (custom admin) | missing | Fall back to shadcn + admin density override (Step 4b only) |
+
+For oh-admin and similar custom-SCSS admins, you'll be in the third row 99% of the time. Default to admin classes.
 
 For shadcn Dialog / Toast (where source has no React equivalent), use only the BARE OVERLAY SHELL:
 - `<Dialog open onOpenChange>` for state-driven open/close + backdrop + ESC handling
@@ -592,3 +605,6 @@ warnings: [...]
 - "I'll skip the dialog and link to a /pages/edit URL instead" → NO. Source uses overlays; prototype uses overlays.
 - "I'll use faker for mock data" → NO. Hardcode 5-15 realistic records.
 - "I'll skip building because dev server works" → NO. The whole point is `dist/index.html` deployable.
+- "I imported the theme but used shadcn `<Button>` / `<Input>` / `<Card>` because they're easier to compose" → NO. If the theme is imported, the theme is mandatory. The BA imported it specifically so the prototype matches the source product. Use admin class names from `styles.compiled.css` directly. shadcn `<Dialog>` shell is OK for focus-trap; everything inside DialogContent must be admin markup.
+- "I used Inter font because that's Vite's default" → NO. Honor `tokens.json typography.fontSans`. If it says Pretendard, import Pretendard CDN.
+- "I used `#fff` body bg because it's clean" → NO. Use `--color-content-bg` or whatever the source's body bg is (oh-admin = `#faf8fb`).
