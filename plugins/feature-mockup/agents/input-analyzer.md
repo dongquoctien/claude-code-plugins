@@ -47,7 +47,7 @@ The parent skill will pass you:
       "purpose": "<localized one-line>",
       "components": ["Header", "Form", "Button", "Card"],
       "fields": [
-        { "name": "email", "type": "email", "required": true, "placeholder": "..." }
+        { "name": "email", "label": "<localized — what the user sees>", "type": "email", "required": true, "placeholder": "..." }
       ],
       "ctas": [
         { "label": "<localized>", "action": "navigate:<other-screen-id>", "variant": "primary" }
@@ -78,6 +78,7 @@ The parent skill will pass you:
 - **Screenshots only, no description:** OCR the screenshots mentally, name screens by their dominant content (e.g., `confirm-cancel`, `cancel-success`).
 - **Conflicting inputs:** prefer the most recent doc; record the conflict in `openQuestions`.
 - **Component names:** stick to a small canonical set: `Header`, `Footer`, `Form`, `Field`, `Button`, `Card`, `Modal`, `Tabs`, `Table`, `List`, `EmptyState`, `Toast`, `Stepper`. Anything else → describe in `notes`.
+- **Field naming:** `name` is a snake_case/camelCase technical identifier (e.g., `email`, `cancelReason`). `label` is the localized human-readable string the user actually sees (e.g., `Lý do huỷ`). The builder uses `name` for the HTML `id`/`name` attributes and `label` for the visible `<label>` text — both are required.
 - **Don't invent business rules.** If the inputs don't say "min booking 24h", don't write that as a requirement — put it in `openQuestions`.
 
 ## Style
