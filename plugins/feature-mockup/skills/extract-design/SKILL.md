@@ -138,6 +138,17 @@ Now do the actual work, in this order:
    ```
    Detects which icon library the project actually uses (FontAwesome / Lucide / Material / Heroicons / Phosphor / custom-svg / custom-png / none) and locates the brand logo (`header-logo*.png|svg`, `app-logo*.png|svg`). Without this, the agent defaults to Lucide and uses a text-only logo — which is wrong for any project using FontAwesome / Material / a real PNG logo. The icon library + logo path go into `manifest.brand` and `manifest.stack.iconLibrary` so the prototype-builder can pick the matching CDN and link the real logo image.
 
+2c. **Source files — copy templates and components.** Run:
+   ```bash
+   node {pluginRoot}/scripts/crawl-source.mjs --in {projectRoot} --out {tmpDir}/source-copy
+   ```
+   Copies framework component sources verbatim into the export, preserving folder structure under `source-copy/src/...`. Caps at 20MB by default. Includes:
+   - Angular: `*.component.html` + `*.component.ts` + `*.module.ts` + `*.service.ts` (use `--no-services` to skip)
+   - Vue / Svelte: `.vue` / `.svelte` SFCs
+   - React/Next.js: PascalCase `.tsx`/`.jsx` files
+
+   **Why this matters:** the BA usually doesn't have the dev's source repo. Without this step, `source-index.json` lists paths the BA's agent cannot resolve. Copying the actual files makes the export self-contained — the BA agent can `Read` any path it sees in `source-index.json`. Verified on oh-admin: 3074 files (1153 templates + 1157 components + 387 services + 362 modules) = 12.5 MB.
+
 3. **Component styles — gather then AI-clean.** Run:
    ```bash
    node {pluginRoot}/scripts/concat-component-styles.mjs --in {projectRoot} --out {tmpDir}/component-styles.raw.scss
@@ -190,6 +201,8 @@ Now do the actual work, in this order:
        "globalsCss": "globals.css",
        "sourceIndex": "source-index.json",
        "iconDetection": "icon-detection.json",
+       "sourceCopy": "source-copy/",
+       "sourceCopyManifest": "source-copy/_source-copy-manifest.json",
        "componentStylesRaw": "component-styles.raw.scss",
        "assetsManifest": "assets/_assets-manifest.json",
        "componentsList": "components.list.md"

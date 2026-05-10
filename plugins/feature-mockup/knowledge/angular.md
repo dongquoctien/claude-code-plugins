@@ -105,8 +105,17 @@ When generating the admin shell:
 
 ## What the agent should do when reading source-index.json for an Angular project
 
+For ANY feature, navigate this way (most expensive last):
+
 1. Read `themeFiles` first — `base-theme.scss`, `basic-theme.scss`, `*-theme.css`. Tokens live here.
 2. Read `globalStyles` next, biggest first — `_layout.scss` (43KB in oh-admin), `_form.scss`, `_buttons.scss`, `_components.scss`, `_table.scss`. These define every class name the rest of the app uses.
-3. Read `templates` for the FEATURE you're prototyping (filter by route folder name) — see how the team composes screens.
-4. Read at most 3-5 `componentStyles` files matching the route, only if needed for component-specific tweaks.
-5. SKIP HTML demo pages (`src/app/html/...`) — they're internal style-guide samples, not real screens.
+3. **Use `routeGroups[<feature-route-name>]` to get the FEATURE files in one query.** Example: building `hotel-content-management` → query `routeGroups['ho-hotel-contents']` → returns templates / components / services for that feature only. Don't filter the global `templates` bucket of 1000+ files — that wastes tokens.
+4. From the feature's templates, read the **container** first (e.g. `*-master.component.html`) — it composes the smaller pieces (`<app-foo-search>`, `<app-foo-grid>`, `<app-foo-control>`).
+5. Then read the grid/list template — Kendo `<kendo-grid-column field="...">` tags reveal the EXACT columns the real product uses. Don't invent columns.
+6. Read the search/filter template — `formGroupName="dateRange1"` + `formControlName="hotelCode"` reveal the EXACT filter fields. Don't invent fields.
+7. When templates reference dynamic data (`*ngFor="let x of resultArray"`), grep for `resultArray` in the feature's `services/` folder. The service often has hardcoded label arrays (e.g. oh-admin's `contents-mapping-data.service.ts` has 62 mapping row labels).
+8. Read at most 3-5 `componentStyles` files for the feature only if you need component-specific tweaks beyond what `globalStyles` covers.
+9. **Custom tag resolution:** when you see an unfamiliar tag like `<app-layout-sidebar-menu-group>` in a feature template, look up `componentBySelector['app-layout-sidebar-menu-group']` to find the component file. Then read that file to understand how the tag is composed.
+10. SKIP HTML demo pages (`src/app/html/...`) — they're internal style-guide samples, not real screens.
+
+**Crucially: read source from `{themeDir}/source-copy/...`, NOT from the dev's machine.** The plugin copies all framework source files into the export so you can read them without source-repo access.

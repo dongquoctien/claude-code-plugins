@@ -18,7 +18,7 @@ function arg(name, fallback) {
 const ROOT = path.resolve(arg('--in', '.'));
 const SRC = arg('--src', 'src');
 const OUT = path.resolve(arg('--out', './source-index.json'));
-const MAX_FILES_PER_BUCKET = Number(arg('--max-files-per-bucket', '500'));
+const MAX_FILES_PER_BUCKET = Number(arg('--max-files-per-bucket', '2000'));
 
 if (!fs.existsSync(path.join(ROOT, SRC))) {
   console.error('source dir not found:', path.join(ROOT, SRC));
@@ -55,9 +55,9 @@ function summarize(absPath, e) {
   }
 
   if (e === '.scss' || e === '.css') {
-    // First few selectors / variables
-    const vars = [...head.matchAll(/^\s*\$([\w-]+)\s*:/gm)].slice(0, 5).map(m => '$' + m[1]);
-    const selectors = [...head.matchAll(/^([.#][\w-]+(?:\s*[,>+~]\s*[.#]?[\w-]+)?)\s*\{/gm)].slice(0, 5).map(m => m[1].trim());
+    // Variables, selectors, custom properties — bumped from 5 to 15 so AI sees the full vocabulary
+    const vars = [...head.matchAll(/^\s*\$([\w-]+)\s*:/gm)].slice(0, 15).map(m => '$' + m[1]);
+    const selectors = [...head.matchAll(/^([.#][\w-]+(?:\s*[,>+~]\s*[.#]?[\w-]+)?)\s*\{/gm)].slice(0, 15).map(m => m[1].trim());
     const importsLine = (head.match(/@import\s+['"][^'"]+['"]/g) || []).length;
     const customProps = (head.match(/--[\w-]+\s*:/g) || []).length;
     return {
@@ -87,13 +87,19 @@ function summarize(absPath, e) {
   }
 
   if (e === '.html') {
-    // Template — grab top-level tag tags
-    const tagSelectors = [...head.matchAll(/<(app-[\w-]+|kendo-[\w-]+|mat-[\w-]+)\b/g)].slice(0, 5).map(m => m[1]);
-    const classes = [...head.matchAll(/class="([^"]+)"/g)].slice(0, 5).map(m => m[1]);
+    // Template — grab framework component tags + class vocabulary
+    const tagSelectors = [...head.matchAll(/<(app-[\w-]+|kendo-[\w-]+|mat-[\w-]+|p-[\w-]+|nz-[\w-]+|el-[\w-]+|v-[\w-]+|pi-[\w-]+)\b/g)].map(m => m[1]);
+    const classes = [...head.matchAll(/class="([^"]+)"/g)].slice(0, 30).map(m => m[1]);
+    const formGroups = [...head.matchAll(/formGroupName=["']([\w-]+)["']/g)].slice(0, 5).map(m => m[1]);
+    const formControls = [...head.matchAll(/formControlName=["']([\w-]+)["']/g)].slice(0, 10).map(m => m[1]);
+    const ngForLoops = [...head.matchAll(/\*ngFor=["']let\s+\w+\s+of\s+(\w+)["']/g)].slice(0, 5).map(m => m[1]);
     return {
       size,
-      tags: [...new Set(tagSelectors)].slice(0, 5),
-      classSamples: [...new Set(classes.flatMap(c => c.split(/\s+/)))].slice(0, 8),
+      tags: [...new Set(tagSelectors)].slice(0, 12),
+      classSamples: [...new Set(classes.flatMap(c => c.split(/\s+/)))].slice(0, 20),
+      formGroups: formGroups.length ? formGroups : undefined,
+      formControls: formControls.length ? formControls : undefined,
+      ngForLoops: ngForLoops.length ? ngForLoops : undefined,
     };
   }
 
@@ -196,20 +202,77 @@ for (const k of Object.keys(buckets)) {
   else buckets[k].sort((a, b) => (b.size || 0) - (a.size || 0));
 }
 
+// ─── Route groups: query files by feature folder name ────────────────────────
+// AI building feature 'ho-hotel-contents' can ask routeGroups['ho-hotel-contents']
+// instead of filtering bucket lists. Saves tokens on navigation.
+const routeGroups = {};
+for (const route of buckets.routes) {
+  routeGroups[route.name] = {
+    routePath: route.path,
+    templates: [],
+    components: [],
+    componentStyles: [],
+    services: [],
+  };
+}
+function bucketForRoute(p) {
+  // Match the /routes/<name>/ segment
+  const m = p.match(/[\\/]routes[\\/]([^\\/]+)[\\/]/);
+  return m ? m[1] : null;
+}
+for (const t of buckets.templates) {
+  const r = bucketForRoute(t.path); if (r && routeGroups[r]) routeGroups[r].templates.push(t.path);
+}
+for (const c of buckets.components) {
+  const r = bucketForRoute(c.path); if (r && routeGroups[r]) routeGroups[r].components.push(c.path);
+}
+for (const s of buckets.componentStyles) {
+  const r = bucketForRoute(s.path); if (r && routeGroups[r]) routeGroups[r].componentStyles.push(s.path);
+}
+// Service files — scan src/app/routes for *.service.ts even though they aren't in `components` bucket
+for (const file of walk(SRC_ROOT)) {
+  const p = rel(file);
+  if (!/\.service\.ts$/.test(p)) continue;
+  const r = bucketForRoute(p);
+  if (r && routeGroups[r]) routeGroups[r].services.push(p);
+}
+// Drop empty route groups (route folder existed but no actual files in it)
+for (const k of Object.keys(routeGroups)) {
+  const g = routeGroups[k];
+  if (g.templates.length + g.components.length + g.componentStyles.length + g.services.length === 0) {
+    delete routeGroups[k];
+  }
+}
+
+// ─── Component selector → file mapping ─────────────────────────────────
+// AI seeing <app-foo> or <kendo-grid> in a template can resolve to the source file.
+const componentBySelector = {};
+for (const c of buckets.components) {
+  if (c.ngSelector) componentBySelector[c.ngSelector] = c.path;
+}
+
 const summary = {
   generatedAt: new Date().toISOString(),
   root: rel(ROOT) || '.',
   totalFilesScanned: totalFiles,
-  counts: Object.fromEntries(Object.entries(buckets).map(([k, v]) => [k, v.length])),
+  counts: {
+    ...Object.fromEntries(Object.entries(buckets).map(([k, v]) => [k, v.length])),
+    routeGroups: Object.keys(routeGroups).length,
+    componentBySelector: Object.keys(componentBySelector).length,
+  },
   // Top-level guidance for the AI
   guide: {
     readForTokens: ['globalStyles', 'themeFiles', 'assetsCss'],
     readForComponentStyles: ['componentStyles'],
     readForLayoutShape: ['templates', 'components'],
     readForMenuStructure: ['routes'],
+    readForFeature: 'When generating a prototype for a specific feature, query routeGroups[<route-name>] FIRST to get the templates/components/styles/services for that feature. Avoid scanning all buckets.',
+    readForCustomTag: 'When you encounter a custom HTML tag like <app-foo>, look it up in componentBySelector to find the source component.',
     referenceForAssets: ['icons', 'images', 'fonts'],
   },
   buckets,
+  routeGroups,
+  componentBySelector,
 };
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

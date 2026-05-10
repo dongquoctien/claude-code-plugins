@@ -78,6 +78,26 @@ Reading the right knowledge file BEFORE the source prevents systematic mistakes:
    - `routes` for menu structure when generating an admin shell
    The index gives one-line summaries (size + top selectors + Angular `selector` + `styleUrls`) so you can pick the 3-5 most relevant files to actually read in full, instead of brute-forcing every file.
 
+   **For feature-specific work** (e.g. building a prototype for `bulk-cancel-bookings` or `hotel-content-management`), use `source-index.json` `routeGroups` first:
+   ```
+   routeGroups['ho-hotel-contents'] = {
+     routePath: 'src/app/routes/ho-hotel-contents',
+     templates: [10 paths],
+     components: [10 paths],
+     componentStyles: [3 paths],
+     services: [3 paths]
+   }
+   ```
+   This gives you the EXACT files for that feature in one lookup, avoiding the cost of filtering 1000+ files in the global buckets. When you find a custom HTML tag like `<app-layout-sidebar-menu-group>` in a template, look up the source file via `componentBySelector['app-layout-sidebar-menu-group']`.
+
+3. **Read actual source files (not just paths).** The export ships `source-copy/` containing the verbatim Angular templates / Vue SFCs / React components from the dev's project. Paths in `source-index.json` resolve under `{themeDir}/source-copy/src/...` (mirrored structure). Read 4-8 critical files for the feature you're building:
+   - The container/master component template
+   - The grid/list component template (Kendo grid columns are gold here)
+   - The search/filter component template (real form fields)
+   - 1-2 modal/dialog templates
+   - 1 service file when the templates reference dynamic data (e.g. `*ngFor="let x of resultArray"` and the `resultArray` is computed in a service — read the service to see the real values)
+   Prefer reading source from `source-copy/` — that's the authoritative copy. Don't try to read from outside the export.
+
 3. Read `{themeDir}/components/_manifest.json` if present. It lists cloned components with name, file, and props. Copy the component files (and the `_utils.*` stub if present) into the prototype's local components folder.
 
    **Assets:** When `{themeDir}/assets/` exists, copy it into the prototype as `assets/` (verbatim folder structure). This makes `<img src="assets/images/common/header-logo.png">` and `url(/assets/images/icons/ico-bed.svg)` references in component-styles.compiled.css resolve correctly. List which icons/images you actually used in the final report so the user knows what's load-bearing vs incidental.
