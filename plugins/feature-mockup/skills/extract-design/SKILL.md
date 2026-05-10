@@ -116,39 +116,6 @@ Ask:
 
 If the file exists, ask whether to overwrite.
 
-## Step 5b — Build orchestration (HYBRID — try dist first, build if needed)
-
-Real frontends ship final styles in their **build output**, not in source. Source CSS is often empty or imports `~package` paths that won't resolve at file://. So before extraction, try to use a built `dist/` directory.
-
-Run:
-
-```bash
-node {pluginRoot}/scripts/build-and-collect.mjs --in {projectRoot} --out {tmpDir}/dist-collected
-```
-
-This script returns one of four decisions:
-
-| Decision | What happened | Action |
-|---|---|---|
-| `used-existing-dist` | Found a fresh dist (< 1 day, has CSS) | Use it. Continue to Step 6. |
-| `build-skipped` | No fresh dist, --allow-build not passed | **Ask the user** before continuing. |
-| `built-fresh` | Build ran successfully | Use new dist. Continue. |
-| `no-dist-no-build` | Build failed or no script | Fall back to static copy (Step 6). |
-
-When the decision is `build-skipped`, ask:
-
-> "I couldn't find a recent production build. Running the build now will produce a much higher-fidelity export (real compiled CSS, optimized images, resolved imports), but takes 1–10 minutes depending on the project. Options:
-> 1. Run `npm run build:prod` now (recommended for the highest-quality export)
-> 2. Use older dist/ if available (older than 1 day — may be stale)
-> 3. Skip build, fall back to static-copy (faster but lower fidelity)"
-
-If they pick (1), re-run with `--allow-build`. If (2), re-run with `--freshness-hours 99999`. If (3), skip and continue to Step 6 with whatever sources exist.
-
-When `dist-collected` is populated:
-- Pass `--in {tmpDir}/dist-collected` to `compile-styles.mjs` instead of `--in {projectRoot}` so it picks up the built CSS.
-- Still copy source assets in Step 6.3 (icons + fonts often live alongside source, not in dist).
-- Mark `manifest.stack.tokenSource` as `"compiled-bundle"` and add `manifest.build = { decision, distPath, buildCommand, buildDurationMs }`.
-
 ## Step 6 — Run extraction
 
 Now do the actual work, in this order:
@@ -159,13 +126,13 @@ Now do the actual work, in this order:
    ```
    Pass `--theme-variant` when the detector reported one. The script normalizes Tailwind / SCSS variables / CSS vars into the canonical `tokens.json` shape and overlays the active theme variant block on top of `:root` for multi-theme systems.
 
-2. **Compiled stylesheet.** Run:
+2. **Source index.** Run:
    ```bash
-   node {pluginRoot}/scripts/compile-styles.mjs --in {projectRoot} --out {tmpDir}/styles.compiled.css
+   node {pluginRoot}/scripts/index-source.mjs --in {projectRoot} --out {tmpDir}/source-index.json
    ```
-   Picks the largest, component-rich compiled CSS bundle in the project (or merges the top 3 for `theme + components` split). Falls back to concatenating raw SCSS partials when no compiled bundle exists. The output preserves real component class names (.btn, .k-grid, .page-sidebar, etc.) so the prototype-builder can reuse them by name.
+   Produces a categorized map of every CSS/SCSS file, component, template, route folder, image, and font with size + one-line summaries. The downstream AI agent reads this index BEFORE individual files so it can prioritize globalStyles + themeFiles + componentStyles intelligently.
 
-3a. **Component styles — gather then AI-clean.** Run:
+3. **Component styles — gather then AI-clean.** Run:
    ```bash
    node {pluginRoot}/scripts/concat-component-styles.mjs --in {projectRoot} --out {tmpDir}/component-styles.raw.scss
    ```
@@ -181,7 +148,7 @@ Now do the actual work, in this order:
 
    Default font budget is 8MB. Pass `--font-budget-mb 0` or `--skip-fonts` to skip font binaries entirely (the prototype falls back to CDN fonts like Pretendard/Inter via @import). Warn the user before fonts push the zip over 20MB.
 
-4. **Component list.** Run `crawl-components.mjs` again (without `--classify`) to write `{tmpDir}/components.list.md`:
+5. **Component list.** Run `crawl-components.mjs` again (without `--classify`) to write `{tmpDir}/components.list.md`:
    ```markdown
    # Components in oh-admin (Angular 9)
 
@@ -196,7 +163,7 @@ Now do the actual work, in this order:
    will use these names + the imported tokens to render equivalent prototypes.
    ```
 
-5. **Manifest.** Generate `{tmpDir}/manifest.json` matching the spec at `docs/fe-export-spec.md`:
+6. **Manifest.** Generate `{tmpDir}/manifest.json` matching the spec at `docs/fe-export-spec.md`:
    ```json
    {
      "name": "<from package.json or angular.json>",
@@ -214,7 +181,7 @@ Now do the actual work, in this order:
      "files": {
        "tokens": "tokens.json",
        "globalsCss": "globals.css",
-       "stylesCompiled": "styles.compiled.css",
+       "sourceIndex": "source-index.json",
        "componentStylesRaw": "component-styles.raw.scss",
        "assetsManifest": "assets/_assets-manifest.json",
        "componentsList": "components.list.md"
@@ -223,12 +190,12 @@ Now do the actual work, in this order:
    }
    ```
 
-6. **Zip.** Bundle the temp dir into the chosen output path using:
+7. **Zip.** Bundle the temp dir into the chosen output path using:
    - Windows: `Compress-Archive -Path {tmpDir}\* -DestinationPath {outPath} -Force`
    - macOS/Linux: `cd {tmpDir} && zip -r {outPath} .`
    Detect platform via `$env:OS` or `uname`.
 
-7. Clean up `{tmpDir}`.
+8. Clean up `{tmpDir}`.
 
 ## Step 7 — Final report
 

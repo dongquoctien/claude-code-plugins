@@ -50,15 +50,21 @@ Verify no `{{` remains in the final file — that's a sign you missed a placehol
    - For `html-tailwind`: copy `{themeDir}/theme.css` into the prototype as `theme.css`, and link it from `<head>` AFTER the inline `<style>` block (so it overrides defaults). Then DELETE the `:root { ... }` block from the inline `<style>` (the imported theme owns those vars now).
    - For `react-vite`: copy `theme.css` into `src/styles/theme.css` and import it once in `src/main.tsx`.
 
-   **ALSO** when these exist (Phase 2.5+ exports), link them BEFORE `theme.css`:
-   - `{themeDir}/styles.compiled.css` → copy + link as `styles.compiled.css`. This is the source product's actual component stylesheet (.btn, .k-grid, .page-sidebar...). Prototype gets real component styling for free.
-   - `{themeDir}/dist/` → copy any matching CSS bundles in there too (production-built, even higher fidelity).
+   **ALSO** when this exists, link it BEFORE `theme.css`:
+   - `{themeDir}/component-styles.compiled.css` → copy + link. This is the AI-cleaned component stylesheet (.btn, .k-grid, .page-sidebar...). Produced by the theme-extractor's Phase 2 cleanup pass over the source product's raw component SCSS files. Prototype gets real component styling for free.
 
-   Order in `<head>` should be: inline base styles → styles.compiled.css → theme.css. theme.css comes last so token overrides win.
+   Order in `<head>` should be: inline base styles → component-styles.compiled.css → theme.css. theme.css comes last so token overrides win.
 
-2. Read `{themeDir}/components/_manifest.json`. It lists every cloned component with its name, file, and props. Copy the component files (and the `_utils.*` stub if present) into the prototype's local components folder.
+2. **Source navigation.** Read `{themeDir}/source-index.json` to understand the design vocabulary. Use the `guide` field to know which buckets matter for the current task:
+   - `globalStyles` and `themeFiles` for layout shapes (`.page-sidebar`, `.page-wrap`, `.k-grid`)
+   - `componentStyles` for individual component appearance
+   - `templates` to see how the source product composes screens (HTML structure, class names actually used together)
+   - `routes` for menu structure when generating an admin shell
+   The index gives one-line summaries (size + top selectors + Angular `selector` + `styleUrls`) so you can pick the 3-5 most relevant files to actually read in full, instead of brute-forcing every file.
 
-   **Assets:** When `{themeDir}/assets/` exists, copy it into the prototype as `assets/` (verbatim folder structure). This makes `<img src="assets/images/common/header-logo.png">` and `url(/assets/images/icons/ico-bed.svg)` references in styles.compiled.css resolve correctly. List which icons/images you actually used in the final report so the user knows what's load-bearing vs incidental.
+3. Read `{themeDir}/components/_manifest.json` if present. It lists cloned components with name, file, and props. Copy the component files (and the `_utils.*` stub if present) into the prototype's local components folder.
+
+   **Assets:** When `{themeDir}/assets/` exists, copy it into the prototype as `assets/` (verbatim folder structure). This makes `<img src="assets/images/common/header-logo.png">` and `url(/assets/images/icons/ico-bed.svg)` references in component-styles.compiled.css resolve correctly. List which icons/images you actually used in the final report so the user knows what's load-bearing vs incidental.
 3. **Use the cloned components** instead of generic HTML when generating screens:
    - If the brief asks for `Button` and the cloned manifest has `Button`, render `<Button variant="primary">...</Button>` rather than a hand-rolled `<button>`. Pick a `variant` from the manifest's declared variants.
    - For `react-vite`: standard JSX import + use.

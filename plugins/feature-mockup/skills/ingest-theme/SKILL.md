@@ -51,10 +51,10 @@ Goal:
   Produce {output}/tokens.json (normalized) + {output}/theme.css (CSS variables) +
   {output}/components/ (cloned with rewritten imports) + {output}/source-manifest.json (copy of input manifest).
 
-Additionally, when the export contains the following, copy them verbatim into the output:
-  - {EXPORT_DIR}/styles.compiled.css → {output}/styles.compiled.css (a real component stylesheet from the source product — prototype-builder can link this in screens to inherit real .btn, .k-grid, .page-sidebar styles).
-  - {EXPORT_DIR}/assets/ → {output}/assets/ (icons + images + fonts + raw style partials, preserving folder structure so url() refs resolve).
-  - {EXPORT_DIR}/dist/ → {output}/dist/ (production-built artifacts when present — even higher fidelity than styles.compiled.css alone).
+Additionally, when the export contains the following, copy them verbatim into the output (preserving folder structure so url() refs resolve):
+  - {EXPORT_DIR}/source-index.json → {output}/source-index.json (categorized map of every source file with one-line summaries — read this BEFORE individual files when you need to navigate the design).
+  - {EXPORT_DIR}/component-styles.raw.scss → run AI cleanup pass to produce {output}/component-styles.compiled.css (see theme-extractor.md Phase 2).
+  - {EXPORT_DIR}/assets/ → {output}/assets/ (icons + images + fonts + raw style partials).
 
 Pipeline:
   1. Detect token source priority: tokens.json > tailwind.config > globals.css.
