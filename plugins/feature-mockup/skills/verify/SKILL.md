@@ -195,7 +195,21 @@ Read `{featureDir}/brief.json`. Find `inputs[]` entries with `kind: "image"`. Co
 
 ## Step 6 — Capture prototype screenshots
 
-The prototype's framework is detected the same way as the `/preview` skill (Step 2 of preview): inspect `featureDir` for `next.config.*`, `nuxt.config.*`, `astro.config.*`, `angular.json`, `svelte.config.*`, `vite.config.*`, `gatsby-config.*`, `webpack.config.*`, or just `index.html`.
+The prototype's framework is detected the same way as the `/preview` skill (Step 2 of preview). Inspect `featureDir` for these signatures in priority order — first match wins:
+
+| Signature | Framework |
+|---|---|
+| `index.html` at root, no `package.json` | `static-html` |
+| `angular.json` | `angular` |
+| `gatsby-config.{js,ts,mjs}` | `gatsby` |
+| `astro.config.{js,ts,mjs,cjs}` | `astro` |
+| `next.config.{js,ts,mjs,cjs}` | `next` |
+| `nuxt.config.{js,ts,mjs}` | `nuxt` |
+| `remix.config.{js,ts}` | `remix` (classic compiler) |
+| `vite.config.*` AND `package.json` deps include `@remix-run/dev` | `remix-vite` |
+| `svelte.config.{js,ts}` | `sveltekit` |
+| `vite.config.*` (any other) | `vite` (React/Vue/Svelte/Solid) |
+| `package.json` only | `node-server` |
 
 ### Static (html-tailwind / index.html at root)
 
@@ -249,8 +263,27 @@ Prototype screenshot(s):  {featureDir}/.verify/prototype-*.png
 Brief:                    {featureDir}/brief.json
 Theme dir:                .claude/feature-mockup/theme (if imported)
 Source framework:         {manifest.stack.framework}  (read from theme/source-manifest.json)
-UI library:               {manifest.stack.uiLib}      (kendo / antd / mui / element-plus / shadcn / none)
-Prototype template:       {prototype-framework}       (static-html / vite / next / nuxt / etc)
+                          one of: angular, react, nextjs, vue, nuxt, svelte, sveltekit,
+                                  astro, remix, gatsby, unknown
+UI library:               {manifest.stack.uiLib}      (e.g. kendo / antd / mui / element-plus /
+                          shadcn / vuetify / chakra / quasar / headlessui / none)
+Prototype template:       {prototype-framework}       (one of: static-html / angular / next /
+                          nuxt / astro / remix / remix-vite / sveltekit / vite / gatsby /
+                          node-server)
+
+Framework knowledge file:
+  Load `{pluginRoot}/knowledge/<source-framework>.md` so the agent compares
+  against framework-specific class name conventions, template syntax, and
+  copy-from-source rules.
+    angular → knowledge/angular.md
+    react → knowledge/react.md
+    nextjs → knowledge/nextjs.md
+    vue / nuxt → knowledge/vue.md
+    svelte / sveltekit → knowledge/svelte.md
+    astro → knowledge/astro.md
+    remix → knowledge/remix.md
+    gatsby → knowledge/gatsby.md
+
 Extract artifacts:
   - validators.json       (per-field validation rules from source)
   - events.json           (handler → action chain map)
@@ -258,6 +291,8 @@ Extract artifacts:
   - route-patterns.json   (filter grids + cell two-line + prefix groups)
   - mock-data.json        (entity records)
   - i18n.json             (locale labels) [if present]
+  - icon-detection.json   (icon library + brand logo)
+  - assets/               (icons + images + fonts copied from source)
 Source-copy/ root:        {themeDir}/source-copy (real source files)
 
 Goal:

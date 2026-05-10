@@ -33,22 +33,31 @@ Inspect `featureDir` contents in priority order. **First match wins.**
 | Signature (check in this order) | Template / framework | Default port | Default script |
 |---|---|---|---|
 | `index.html` at root + no `package.json` | `static-html` | n/a (file://) | n/a |
+| `angular.json` | `angular` | 4200 | `start` |
+| `gatsby-config.{js,ts,mjs}` | `gatsby` | 8000 | `develop` |
+| `astro.config.{js,ts,mjs,cjs}` | `astro` | 4321 | `dev` |
 | `next.config.{js,ts,mjs,cjs}` | `next` | 3000 | `dev` |
 | `nuxt.config.{js,ts,mjs}` | `nuxt` | 3000 | `dev` |
-| `astro.config.{js,ts,mjs,cjs}` | `astro` | 4321 | `dev` |
-| `angular.json` | `angular` | 4200 | `start` |
+| `remix.config.{js,ts}` | `remix` (legacy classic compiler) | 3000 | `dev` |
+| `vite.config.{js,ts,mjs,cjs}` AND deps include `@remix-run/dev` | `remix-vite` | 3000 | `dev` |
 | `svelte.config.{js,ts}` | `sveltekit` | 5173 | `dev` |
-| `vite.config.{js,ts,mjs,cjs}` | `vite` (React/Vue/Svelte/Solid) | 5173 | `dev` |
-| `remix.config.{js,ts}` OR `vite.config` with `@remix-run/dev` import | `remix` | 3000 | `dev` |
-| `gatsby-config.{js,ts,mjs}` | `gatsby` | 8000 | `develop` |
+| `vite.config.{js,ts,mjs,cjs}` (any other) | `vite` (React/Vue/Svelte/Solid) | 5173 | `dev` |
 | `webpack.config.{js,ts}` + `package.json` with `dev` script | `webpack` | 8080 | `dev` |
 | `package.json` only (no config file) | `node-server` | (read from script) | `start` or `dev` |
 | Multiple configs / ambiguous | ask user | — | — |
+
+**Detection priority rationale**: signatures specific to a single framework (angular.json, gatsby-config, astro.config, next.config, nuxt.config) are checked BEFORE Remix and SvelteKit (which use vite.config plus their own config), and BEFORE generic `vite.config` which is shared by many React/Vue/Svelte projects. For Remix, classic-compiler `remix.config.{js,ts}` is checked first, then a Vite-based Remix project is identified by `vite.config.*` AND a `@remix-run/dev` dependency in `package.json`.
 
 When ambiguous OR multiple top-level configs detected, ask:
 > "Found `{files}`. Multiple frameworks detected — which one should I start? ({option1} / {option2} / static index.html / cancel)"
 
 Read `package.json` `scripts` to confirm the chosen script exists. If `dev` is missing, fall back in this order: `start` → `serve` → `develop` → ask user.
+
+**Framework default-script overrides** (when matching named script is present, prefer it over the default):
+- gatsby → `develop` (canonical), fall back to `start`
+- angular → `start` (canonical for Angular CLI), fall back to `dev`
+- astro → `dev`, fall back to `start`
+- remix → `dev`, fall back to `vite:dev` or `remix:dev`
 
 ## Step 2b — Detect package manager
 
@@ -114,15 +123,16 @@ fi
 
 | Framework | Stdout signature to grep |
 |---|---|
-| next | `- Local:\s+(https?://[^\s]+)` OR `Ready in \d+s\s+http(s)?://([^\s]+)` |
-| nuxt | `> Local:\s+(https?://[^\s]+)` OR `Listening on (https?://[^\s]+)` |
-| astro | `Local\s+(https?://[^\s]+)` |
-| angular | `Local:\s+(https?://[^\s]+)` |
+| next | `- Local:\s+(https?://[^\s]+)` OR `Ready in \d+(?:\.\d+)?s?\s+http(s)?://([^\s]+)` OR `▲ Next.js.*\n\s*-\s*Local:\s+(https?://[^\s]+)` |
+| nuxt | `> Local:\s+(https?://[^\s]+)` OR `Listening on (https?://[^\s]+)` OR `Network:\s+(https?://[^\s]+)` |
+| astro | `Local\s+(https?://[^\s]+)` (note: tabs/spaces between `Local` and URL — astro uses ASCII art "🚀 astro v4.x.x ready in...") |
+| angular | `Local:\s+(https?://[^\s]+)` OR `\*\*\s*Angular Live Development Server is listening on.*?(https?://[^\s]+)` |
 | sveltekit / vite | `Local:\s+(https?://[^\s]+)` (vite's standard output) |
-| remix | `Local:\s+(https?://[^\s]+)` (vite-based) |
-| gatsby | `You can now view .* in the browser.\s+(https?://[^\s]+)` |
+| remix (classic) | `Remix App Server started at\s+(https?://[^\s]+)` OR `(https?://localhost:\d+)` from build |
+| remix-vite | `Local:\s+(https?://[^\s]+)` (vite output, default port 3000 not 5173) |
+| gatsby | `You can now view .* in the browser.\s+(https?://[^\s]+)` OR `\b(http://localhost:8000)\b` |
 | webpack | `Project is running at\s+(https?://[^\s]+)` OR `webpack-dev-server.* on.* (https?://[^\s]+)` |
-| Generic fallback | `(https?://(?:localhost|127\.0\.0\.1):\d+(?:/[^\s]*)?)` |
+| Generic fallback | `(https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+(?:/[^\s]*)?)` |
 
 If no URL appears in stdout within 30 seconds, surface the last 20 lines of stdout to the user and ask:
 > "Dev server hasn't logged a URL after 30s. Is it crashing or slow? Show me the output, or fall back to {default-port-from-Step-2}."
@@ -143,9 +153,14 @@ Some frameworks need extra flags for the dev server to bind correctly:
 | Framework | Command tweak | Why |
 |---|---|---|
 | Angular | `ng serve --open=false --host=0.0.0.0` (when in WSL/container) | Default `localhost` not reachable from Windows host |
-| Vite | `vite --host=0.0.0.0 --port=5173` (when WSL) | Same |
+| Vite (any flavour) | `vite --host=0.0.0.0 --port=5173` (when WSL) | Same |
 | Next | `next dev -H 0.0.0.0 -p 3000` (when WSL) | Same |
 | Nuxt | `nuxi dev --host 0.0.0.0 --port 3000` (when WSL) | Same |
+| Astro | `astro dev --host 0.0.0.0 --port 4321` (when WSL) | Default binds 127.0.0.1 — no Windows host access |
+| Remix (Vite) | `remix vite:dev --host 0.0.0.0` (when WSL) | Vite-based Remix uses Vite's --host |
+| Remix (classic) | `remix dev --port 3000 --host 0.0.0.0` (when WSL) | Express server bind |
+| Gatsby | `gatsby develop --host 0.0.0.0 --port 8000` (when WSL) | Default binds localhost only |
+| SvelteKit | `vite dev --host 0.0.0.0 --port 5173` (when WSL) | Same as Vite |
 
 Apply only when WSL detected. Print a hint:
 > "Detected WSL — using `--host 0.0.0.0` so Windows browser can reach the server. Open `http://localhost:{port}` in Windows browser."

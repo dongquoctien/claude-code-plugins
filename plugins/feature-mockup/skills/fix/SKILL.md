@@ -138,11 +138,13 @@ When user explicitly says "I want it different from the rule" (e.g. "yes, use th
 | `index.html` at root, no `package.json` | static HTML + inline `<style>` + inline `<script>` |
 | `next.config.*` | TSX/JSX components in `app/` or `pages/`, CSS modules or Tailwind, `globals.css` |
 | `nuxt.config.*` | Vue SFC in `pages/` + `components/`, scoped `<style>` blocks |
-| `astro.config.*` | `.astro` files (HTML-like + frontmatter), can embed React/Vue/Svelte |
+| `astro.config.*` | `.astro` files (frontmatter `---` ... `---` + template body + `<style>` + `<script>`); islands may contain React/Vue/Svelte/Solid |
 | `angular.json` | `*.component.html` templates + `*.component.ts` + `*.component.scss` |
 | `svelte.config.*` | `.svelte` files (template + `<script>` + `<style>`) |
+| `vite.config.*` AND deps `@remix-run/dev` | Remix v2 — TSX in `app/routes/` (flat-route names like `booking._index.tsx`, `booking.$id.tsx`), `app/root.tsx`, `app/components/`, CSS via `links` export |
 | `vite.config.*` | depends on imports — React JSX or Vue SFC |
-| `gatsby-config.*` | React JSX |
+| `remix.config.*` | Remix classic compiler — same edit targets as Remix Vite (`app/routes/`, `app/root.tsx`) |
+| `gatsby-config.*` | React TSX/JSX in `src/pages/`, `src/templates/`, `src/components/`; gatsby-{node,browser,ssr}.js for site-wide config |
 
 Each target type has different syntax — apply the right edit pattern.
 
@@ -151,11 +153,11 @@ Each target type has different syntax — apply the right edit pattern.
 | Framework | Edit pattern |
 |---|---|
 | static HTML | Edit `class="..."` attribute or inline `<style>` block |
-| React/Next.js | Edit `className="..."` (NOT `class=`) — JSX requirement |
+| React/Next.js/Remix/Gatsby | Edit `className="..."` (NOT `class=`) — JSX requirement. For Remix flat routes the file is `app/routes/<...>.tsx`; for Gatsby pages it's `src/pages/<...>.tsx` |
 | Vue SFC | Edit `class="..."` in `<template>` OR `:class="{ ... }"` for dynamic |
 | Svelte | Edit `class="..."` OR `class:active={cond}` for conditional |
 | Angular | Edit `class="..."` in `*.component.html` OR `[ngClass]="..."` for dynamic; for color tokens edit the component's `*.component.scss` or `:host { ... }` |
-| Astro | Edit `class="..."` (HTML-like) OR `class:list={[...]}` syntax |
+| Astro | Edit `class="..."` (HTML-like) in template body OR `class:list={[...]}` for dynamic. Frontmatter `---` block holds JS — only edit there when the fix needs to change a build-time variable used in template interpolation. Scoped `<style>` block is hash-class scoped at build, but write rules with the unscoped class names (Astro adds the hash automatically) |
 
 For colors when theme imported: prefer CSS variable (`var(--color-danger)`) over literal hex. For spacing: use existing rem/px scale found in theme.css.
 
@@ -175,6 +177,17 @@ For colors when theme imported: prefer CSS variable (`var(--color-danger)`) over
 | Vue `v-for` → static HTML | Materialize with sample values |
 | Svelte `{#each items as item}` → Svelte | Keep |
 | Svelte `{#each items as item}` → static HTML | Materialize |
+| Astro `{items.map(x => <Card .../>)}` → static HTML | Materialize |
+| Astro `<Component prop={x} />` → static HTML | Inline the component's first-render HTML |
+| Astro `<slot />` → static HTML | Inline the slot's children content from the parent |
+| Astro `client:load` / `client:visible` island → static HTML | Render the island's first-render HTML; preserve event handlers via `onclick` |
+| Remix `useLoaderData()` → static HTML | Inline the loader's resolved data shape as hardcoded values |
+| Remix `<Form method="post">` → static HTML | Replace with `<form onsubmit="event.preventDefault(); ...">` plus a JS handler that simulates the action's behaviour (toast + state mutation) |
+| Remix `<Outlet />` (parent route) → static HTML | Inline the matching child route's HTML at the outlet position |
+| Remix `<Link to="/path">` → static HTML | `<a href="path.html">` (or `./pages/path.html` per link-path rules) |
+| Gatsby `data.allMarkdownRemark.nodes.map(...)` → static HTML | Hardcode 3-6 sample nodes with the same shape |
+| Gatsby `<StaticImage src="..." />` / `<GatsbyImage />` → static HTML | Replace with `<img src="..." />`; copy the actual image into prototype's `assets/` |
+| Gatsby `<Link to="/path">` → static HTML | `<a href="path.html">` |
 
 For tables: insert `<th>` + `<td>` at the right column index. Match column order from source-copy/. For forms: insert `<label>` + `<input>` with `id`/`for`/`name` matching source's `formControlName` (Angular), `name` attr (React/Vue), `name` (Svelte).
 
@@ -185,22 +198,26 @@ For tables: insert `<th>` + `<td>` at the right column index. Match column order
 | Prototype framework | Implementation |
 |---|---|
 | static HTML | Inline JS function + HTML5 attrs (`required`, `pattern`, `min`, `max`, `minlength`) |
-| React | `react-hook-form` + zod schema OR controlled state with manual validators OR HTML5 attrs |
-| Vue | VeeValidate + zod OR `:rules` for Element Plus / native attrs |
-| Svelte | Felte + zod OR Superforms (SvelteKit) OR native attrs |
+| React / Next.js / Gatsby | `react-hook-form` + zod schema OR controlled state with manual validators OR HTML5 attrs |
+| Vue / Nuxt | VeeValidate + zod OR `:rules` for Element Plus / native attrs |
+| Svelte / SvelteKit | Felte + zod OR Superforms (SvelteKit) OR native attrs |
 | Angular | Reactive form with `Validators.required`, `Validators.pattern(<regex>)`, etc. |
+| Astro | Native HTML5 attrs in `<form>` for static-only pages; for islands use the island's framework pattern (React/Vue/Svelte) |
+| Remix (classic / Vite) | Server-side: `parse(zodSchema, formData)` in the `action` export. Client-side: pair native HTML5 attrs with optional `react-hook-form` or `Conform` for richer messages |
 
 For static prototypes, always emit BOTH HTML5 attribute (e.g. `required`, `pattern="..."`) AND JS-side check on submit (so the demo shows custom error messages).
 
 **Event handlers:** read `events.json[<route>].handlers[<name>].actions`.
 
-| Action kind | Static HTML | React JSX | Vue SFC | Svelte | Angular |
-|---|---|---|---|---|---|
-| `toast` | `showToast(msg)` helper | `toast.success(msg)` (sonner/shadcn-toast) | `ElMessage.success(msg)` (Element Plus) | toast helper | `MatSnackBar.open(msg)` |
-| `dialog-open` | `document.getElementById(id).hidden = false` | setState `setOpen(true)` for `<Dialog open>` | `dialogVisible.value = true` | bindable boolean | `MatDialog.open(...)` |
-| `dialog-close` | `.hidden = true` | `setOpen(false)` | `dialogVisible.value = false` | reset bindable | `dialogRef.close()` |
-| `http-post` (simulated) | localStorage mutation + setTimeout for "delay" | `useMutation` mock OR direct setState | `axios.post` mocked | fetch mocked | `HttpClient.post` mocked |
-| `navigate` | `window.location.href = '...'` | `router.push(...)` (Next/react-router) | `router.push(...)` (vue-router) | `goto(...)` (SvelteKit) | `Router.navigate(...)` |
+| Action kind | Static HTML | React/Next/Gatsby | Vue/Nuxt | Svelte | Angular | Astro | Remix |
+|---|---|---|---|---|---|---|---|
+| `toast` | `showToast(msg)` helper | `toast.success(msg)` (sonner) | `ElMessage.success(msg)` | toast helper | `MatSnackBar.open(msg)` | island toast OR `<script>` `showToast()` | `toast.success(msg)` (sonner — common) |
+| `dialog-open` | `el.hidden = false` | `setOpen(true)` | `dialogVisible.value = true` | bindable boolean | `MatDialog.open(...)` | client island state OR vanilla JS | `setOpen(true)` |
+| `dialog-close` | `el.hidden = true` | `setOpen(false)` | `dialogVisible.value = false` | reset bindable | `dialogRef.close()` | island state | `setOpen(false)` |
+| `http-post` (simulated) | localStorage mutation + setTimeout | `useMutation` mock OR setState | `axios.post` mocked | fetch mocked | `HttpClient.post` mocked | island fetch mock | `<Form method="post">` simulated as `onsubmit` + state |
+| `navigate` | `window.location.href = '...'` | `router.push(...)` | `router.push(...)` | `goto(...)` | `Router.navigate(...)` | `<a href>` OR `Astro.redirect()` (server) | `<Link to="...">` OR `useNavigate()` |
+| `loader` (Remix-only) | n/a | n/a | n/a | n/a | n/a | n/a | Run client-side as `useEffect`/`onMount` fetch when porting to non-Remix; otherwise hardcode |
+| `action` (Remix-only) | n/a | n/a | n/a | n/a | n/a | n/a | Replace with onsubmit handler that mocks the action's response |
 
 For static-html prototypes (most common), always use the vanilla JS column. For other framework prototypes, use the matching framework's pattern.
 
@@ -236,12 +253,15 @@ Run sanity checks appropriate to the prototype's framework:
 4. **No emoji introduced**: grep for `[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]` in `index.html` and `pages/*.html`. Fail if any.
 5. **Broken cross-page links**: extract `href="..."` values, verify each target exists. Skip `http(s)://`, `mailto:`, `#anchor`.
 
-### React / Next.js prototype
+### React / Next.js / Gatsby / Remix prototype
 1. **Lint**: `npm run lint` if script exists; otherwise skip.
 2. **Type check**: `npm run typecheck` or `npx tsc --noEmit` if `tsconfig.json` present.
 3. **Build smoke**: `npm run build --dry-run` (if framework supports) — only when fix is structural.
-4. **className not class**: grep `class="` in `.tsx` files — flag as potential bug (JSX requires `className`).
-5. **No emoji introduced**: same as static.
+4. **className not class**: grep `class="` in `.tsx`/`.jsx` files — flag as potential bug (JSX requires `className`).
+5. **htmlFor not for**: grep `<label\s[^>]*\bfor=` in `.tsx` files — JSX requires `htmlFor`.
+6. **No emoji introduced**: same as static.
+7. **Remix-specific**: grep `useLoaderData|useActionData` in route files — verify the corresponding `loader`/`action` export still exists in the same file (otherwise the hook errors at runtime).
+8. **Gatsby-specific**: grep `graphql\`...\`` page queries — verify the field set referenced in the JSX matches the query selection set (regex `data\.\w+` ↔ query field).
 
 ### Vue SFC prototype
 1. **`vue-tsc --noEmit`** if `vue-tsc` available.
@@ -256,6 +276,23 @@ Run sanity checks appropriate to the prototype's framework:
 1. **`ng build --configuration development --no-progress`** as smoke (slow but authoritative). OR skip and trust the Edit went through cleanly.
 2. **Template binding**: grep for `formControlName="X"` — verify X exists in the corresponding component class.
 3. **No emoji**: same.
+
+### Astro prototype
+1. **`astro check`** if available — type-checks `.astro` files.
+2. **Frontmatter balance**: every `.astro` file should have exactly 0 or 2 occurrences of the `---` line; flag files with odd counts.
+3. **Hydration directive sanity**: when an island has `client:only` but no `<framework>` value (e.g. `client:only` without `="react"`), flag — Astro requires the framework name.
+4. **`<style>` scoped class refs**: grep class attributes against rules in scoped `<style>` blocks; warn on unknowns.
+5. **No emoji**: same.
+
+### Remix prototype (additional checks beyond React)
+1. **Route file naming**: `app/routes/*.tsx` filenames should use `.` as separator and `$` for params. Flag invalid characters.
+2. **Server module split**: code that imports `~/lib/db` or `node:fs` belongs in a `loader`/`action` (server) — flag if present in the default export's component body.
+3. **`<Form>` action target**: when `<Form action="?/x">` references a named action, verify the corresponding `action` export handles the `?/x` discriminator.
+
+### Gatsby prototype (additional checks beyond React)
+1. **Page query export naming**: each page file should export EXACTLY ONE `query` graphql tagged template (or zero). Flag duplicates.
+2. **`StaticImage` / `GatsbyImage` src paths**: when present in JSX, verify the path resolves under `src/images/` or via `gatsby-source-filesystem` configured paths.
+3. **Internal Link paths**: `<Link to="/x">` paths should be absolute from site root (start with `/`); flag relative paths.
 
 ### Common to all frameworks
 - **Theme variable references**: grep `var\(--[\w-]+\)` → verify each `--name` is defined in the imported theme. Warn on unknowns.
