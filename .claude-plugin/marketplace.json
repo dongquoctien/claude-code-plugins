@@ -10,5 +10,14 @@
     "description": "Personal Claude Code plugin marketplace — slash commands, skills, agents, and hooks for AI-driven workflows.",
     "version": "0.1.0"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "feature-mockup",
+      "source": "./plugins/feature-mockup",
+      "description": "BA-friendly prototype generator. Turn a feature description plus screenshots/docs into a runnable HTML or React mockup, optionally themed with the team's real front-end design.",
+      "version": "0.1.0",
+      "category": "planning",
+      "keywords": ["business-analyst", "prototype", "mockup", "planning", "design-system"]
+    }
+  ]
 }

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dongquoctien/claude-code-plugins/main/plugins/feature-mockup/schemas/config.schema.json",
+  "title": "feature-mockup project config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workingLanguage", "outputDir", "defaultTemplate"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "workingLanguage": {
+      "type": "string",
+      "enum": ["en", "ko", "vi"],
+      "description": "Language used for prompts to the user and copy in generated prototypes."
+    },
+    "outputDir": {
+      "type": "string",
+      "description": "Where mockup folders are written, relative to project root.",
+      "default": "docs/mockups"
+    },
+    "defaultTemplate": {
+      "type": "string",
+      "enum": ["html-tailwind", "react-vite"],
+      "description": "Which built-in template to use when /feature-mockup:make does not specify one."
+    },
+    "autoPreview": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether /feature-mockup:make should suggest /feature-mockup:preview at the end."
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imported": { "type": "boolean", "default": false },
+        "path": { "type": "string", "default": ".claude/feature-mockup/theme" }
+      }
+    }
+  }
+}

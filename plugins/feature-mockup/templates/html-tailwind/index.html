@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{FEATURE_TITLE}}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-fg: #0f172a;
+      --color-muted: #64748b;
+      --color-border: #e2e8f0;
+      --color-accent: #6366f1;
+      --color-accent-fg: #ffffff;
+      --radius: 0.5rem;
+      --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    }
+    html, body { background: var(--color-bg); color: var(--color-fg); font-family: var(--font-sans); }
+    .btn-primary { background: var(--color-accent); color: var(--color-accent-fg); border-radius: var(--radius); padding: .625rem 1rem; font-weight: 500; }
+    .btn-primary:hover { filter: brightness(0.95); }
+    .btn-ghost { color: var(--color-fg); border: 1px solid var(--color-border); border-radius: var(--radius); padding: .625rem 1rem; font-weight: 500; background: transparent; }
+    .card { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 1.25rem; }
+    .field-label { font-size: .875rem; font-weight: 500; color: var(--color-fg); margin-bottom: .25rem; display: block; }
+    .field-input { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius); padding: .5rem .75rem; background: transparent; color: var(--color-fg); }
+    .field-input:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <main class="max-w-3xl mx-auto px-6 py-12">
+    <header class="mb-10">
+      <p class="text-sm uppercase tracking-wider" style="color: var(--color-muted);">{{FEATURE_KIND}}</p>
+      <h1 class="text-3xl font-semibold mt-1">{{FEATURE_TITLE}}</h1>
+      <p class="mt-3" style="color: var(--color-muted);">{{FEATURE_SUMMARY}}</p>
+    </header>
+
+    <!-- prototype-builder injects the screen body here -->
+    <section id="screen-body">
+      <div class="card">
+        <p>This is a placeholder. The prototype-builder agent should replace this section with the generated screen content.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Prototype Navigator (injected by prototype-builder) -->
+  <nav id="proto-nav" class="fixed bottom-4 right-4 card shadow-lg" style="max-width: 280px;">
+    <p class="text-xs font-semibold uppercase tracking-wider mb-2" style="color: var(--color-muted);">Prototype Navigator</p>
+    <ul class="space-y-1 text-sm" id="proto-nav-list">
+      <li><a href="./index.html" class="hover:underline">Home</a></li>
+    </ul>
+  </nav>
+</body>
+</html>
