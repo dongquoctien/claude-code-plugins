@@ -140,6 +140,33 @@ Read `knowledge/<framework>.md` ("Copy-from-source discipline" section) for fram
 
 If you find yourself writing internal reasoning like "I picked representative 8 of 17", STOP and render all 17 instead. Width problems are styling problems (add scroll), not column-count problems.
 
+### Inline-script gotchas (avoid recurring bugs)
+
+When you write the inline `<script>` block, these mistakes crash the modal at first click and frustrate the demo:
+
+1. **`switchTab(btn, key)` — pane container resolution.** If the tabs nav (`<nav class="tabs-nav">`) is rendered OUTSIDE the form (very common — modal-content has the tabs at top + form below), `btn.closest('form')` returns null and the function crashes. Always resolve the pane container with a fallback chain:
+   ```js
+   const container = btn.closest('.modal-window, form, [data-tabs-root]') || btn.parentElement.parentElement;
+   if (!container) return;
+   container.querySelectorAll('.tab-pane').forEach(p => p.hidden = p.dataset.pane !== key);
+   ```
+
+2. **Element lookups inside dialog open functions.** When `openCreateDialog()` calls `document.getElementById('hotel-master-form')` BEFORE the modal is set to `hidden=false`, the form is in the DOM but pickers may not have their initial values populated yet. Wrap the body of every dialog-open function in:
+   ```js
+   const form = document.getElementById('hotel-master-form');
+   if (!form) { console.warn('hotel-master-form not in DOM'); return; }
+   form.reset();
+   // ... rest of setup
+   document.getElementById('modal-hotel-master').hidden = false;
+   ```
+   Always check `if (!el) return;` before `.querySelectorAll` / `.classList` / `.value` on elements that might not exist.
+
+3. **Form ID consistency.** The form's `id` MUST match what `openCreateDialog`/`openEditDialog`/`submitHotelForm` expects. Pick ONE id (e.g. `hotel-master-form`) and use it everywhere — both in the HTML attribute and every `getElementById` call. A typo here causes silent crashes.
+
+4. **`onclick` attribute strings.** When you wire a button via `<button onclick="openModal('modal-x')">`, the function MUST be a top-level function or attached to `window`. If it lives in an IIFE without `window.__proto.openModal`, the inline handler can't see it. Either expose via `window.__proto = { openCreateDialog, openEditDialog, ... }` AND wire as `<button onclick="window.__proto.openCreateDialog()">`, or skip the IIFE wrap and let functions be globals.
+
+5. **Smoke-test before delivery.** Open the produced `index.html` in a headless test (or a browser tab via Chrome MCP) and click EVERY toolbar button + EVERY row Edit + EVERY row Delete. If any click throws a `Cannot read properties of null` error, fix it before reporting success.
+
 ### Interactive CRUD layer (vanilla JS — runs in static HTML)
 
 The static HTML+CSS prototype isn't read-only. It runs a **vanilla JS interactive layer** for Create / Read / Update / Delete + form validation + state persist. No frameworks, no npm install — just `<script>` tags.
