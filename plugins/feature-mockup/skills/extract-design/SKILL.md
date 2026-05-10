@@ -161,6 +161,29 @@ Now do the actual work, in this order:
    ```
    Extracts per-field validation rules (Angular `Validators.required/email/min/max/pattern`, class-validator decorators `@IsEmail`/`@MinLength`/`@Min`/`@IsNotEmpty`, HTML5 attributes `required`/`type=email`/`pattern=`/`minlength=`). Output groups by feature route. The BA-side prototype embeds these rules in inline JS and runs them on form submit (alongside HTML5 native validation). Without this file, prototype forms accept any input and the demo doesn't realistically reject bad data. Verified on oh-admin: 1129 fields with 1192 rules across 100+ routes.
 
+2e1. **Event handlers + UX flows.** Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-events.mjs --in {projectRoot} --out {tmpDir}/events.json
+   ```
+   Multi-stack scanner (Angular component.ts, Vue SFC `<script setup>`, React tsx, Svelte) that pulls every event handler method (onSave, onDelete, onSubmit, openXxxDialog, ...) and tags the actions inside its body: toast / dialog-open / dialog-close / navigate / http-get/post/put/delete / ngrx-dispatch / pinia-action / form-submit / form-reset / event-emit. Plus extracts trigger bindings from templates (`(click)="..."`, `@click="..."`, `onClick={...}`).
+
+   The BA-side prototype-builder uses this to auto-wire JS handlers with the correct UX flow: e.g. `onSaveHotel` → validate form → store mutation → toast "Saved" → close modal. Without events.json, the agent guesses the flow from dialog headers + brief text and misses real product behavior. Verified on oh-admin: 3492 handlers + 5134 actions + 1634 template triggers across 130 routes.
+
+2e2. **Business rules + error messages + constants.** Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-business-rules.mjs --in {projectRoot} --out {tmpDir}/business-rules.json
+   ```
+   Multi-stack scanner that captures:
+   - Tagged business-rule comments: `// BR-001`, `// ERR-REG-014`, `// R12 legacy`, `/* business: ... */`
+   - Imperative comments: `// must`, `// cannot`, `// max 20 chips`
+   - Conditional alerts: `if (condition) { alert("Period max 3 months") }` → captures both condition AND message
+   - Custom validators: `function validateFoo() { return { errorKey } }`
+   - Constants with admin-meaningful prefixes: `MAX_AREA_CHIPS = 20`, `ERR_VALIDATION_xxx`, `DEFAULT_PAGE_SIZE`
+   - Error codes referenced in source: `'ERR-REG-003'`, `'ERR-VAL-XXX'`
+   - Conditional disable/hide: `[disabled]="region === 'multi'"`, `:disabled="..."`, `disabled={...}`
+
+   Verified on oh-admin: 525 rules + 331 errors + 9 constants. ho-hotel-contents alone surfaced 4 conditional alerts with real source messages ("Period accept max 3 months", "There are no items selected", etc.) — exactly the implicit business rules the prototype must demonstrate.
+
 2e. **Mock data — seed records per entity.** Run:
    ```bash
    node {pluginRoot}/scripts/extract-mock-data.mjs --in {projectRoot} --out {tmpDir}/mock-data.json
@@ -225,6 +248,8 @@ Now do the actual work, in this order:
        "iconDetection": "icon-detection.json",
        "dialogDetection": "dialog-detection.json",
        "validators": "validators.json",
+       "events": "events.json",
+       "businessRules": "business-rules.json",
        "mockData": "mock-data.json",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",

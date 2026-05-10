@@ -56,6 +56,8 @@ Additionally, when the export contains the following, copy them verbatim into th
   - {EXPORT_DIR}/icon-detection.json → {output}/icon-detection.json (icon library + brand logo path).
   - {EXPORT_DIR}/dialog-detection.json → {output}/dialog-detection.json (per-feature map of dialog/modal headers and toast patterns — prototype-builder uses this to render overlays).
   - {EXPORT_DIR}/validators.json → {output}/validators.json (per-field validation rules — prototype embeds in inline JS for form submit validation).
+  - {EXPORT_DIR}/events.json → {output}/events.json (event handlers + action tags per route — prototype auto-wires onclick handlers with correct UX flow: validate→mutate→toast→close).
+  - {EXPORT_DIR}/business-rules.json → {output}/business-rules.json (conditional alerts + error messages + constants extracted from source — prototype shows real domain logic, not invented).
   - {EXPORT_DIR}/mock-data.json → {output}/mock-data.json (entity records auto-extracted from source services — prototype uses as SEED_DATA for CRUD).
   - {EXPORT_DIR}/source-copy/ → {output}/source-copy/ (verbatim Angular templates / Vue SFCs / React components — agent reads from here, not the dev's machine).
   - {EXPORT_DIR}/component-styles.raw.scss → run AI cleanup pass to produce {output}/component-styles.compiled.css (see theme-extractor.md Phase 2).

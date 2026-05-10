@@ -186,6 +186,75 @@ The static HTML+CSS prototype isn't read-only. It runs a **vanilla JS interactiv
 
 When `mock-data.json` is missing or thin, supplement with 5-15 realistic invented records per entity. Working language for human-readable fields. NO faker library — hardcode in the inline `<script>`.
 
+**Read `events.json`** (when present). Per-route map of source event handlers + the actions each handler performs:
+
+```json
+"ho-hotel-contents": {
+  "handlers": {
+    "onClickAdd": { "actions": [{"kind":"dialog-open","target":"hotel-master"}, {"kind":"event-emit"}], "framework": "angular" },
+    "onSaveHotel": { "actions": [{"kind":"http-post","target":"/api/hotels"}, {"kind":"toast","message":"Saved"}, {"kind":"dialog-close"}], "framework": "angular" }
+  },
+  "triggers": {
+    "onClickAdd": [{"event":"click","sourceFile":"...component.html"}]
+  }
+}
+```
+
+When you wire a button in the prototype, look up its handler in `events.json` and reproduce the action chain. Example:
+
+```js
+// events.json says onSaveHotel does: http-post + toast "Saved" + dialog-close
+function onSaveHotel(e) {
+  e.preventDefault();
+  const data = validateForm(e.target);
+  if (!data) return;
+  // simulate http-post via store mutation
+  if (mode === 'create') createHotel(data);
+  else updateHotel(currentId, data);
+  showToast('Saved', 'success');                  // matches events.json action
+  closeModal('modal-hotel-master');                // matches dialog-close
+}
+```
+
+This way the prototype's UX flow MATCHES what the dev wrote in source, not the agent's guess.
+
+**Read `business-rules.json`** (when present). Conditional alerts + error messages + constants:
+
+```json
+"ho-hotel-contents": {
+  "rules": [
+    { "kind": "conditional-alert", "condition": "!result", "message": "Period accept max 3 months", "sourceFile": "..." },
+    { "kind": "conditional-alert", "condition": "hotelCodes.length > 1", "message": "Please select one item.", "sourceFile": "..." }
+  ],
+  "constants": [{ "name": "MAX_AREA_CHIPS", "value": "20", "sourceFile": "..." }],
+  "errorMessages": [{ "code": "ERR-REG-003", "message": null, "sourceFile": "..." }]
+}
+```
+
+Embed these into the prototype as inline `BUSINESS_RULES` constant. When validating or submitting, check the conditions and show the source's actual error message — NOT a generic "Invalid input". Example:
+
+```js
+const BUSINESS_RULES = {
+  // From business-rules.json
+  maxDateRangeMonths: 3,
+  maxAreaChips: 20,
+  errorMessages: {
+    'period-too-long': 'Period accept max 3 months',
+    'multi-selection': 'Please select one item.',
+    'no-selection': 'There are no items selected.',
+  },
+};
+
+function validateDateRange(from, to) {
+  const diffMonths = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24 * 30);
+  if (diffMonths > BUSINESS_RULES.maxDateRangeMonths) {
+    showToast(BUSINESS_RULES.errorMessages['period-too-long'], 'error');
+    return false;
+  }
+  return true;
+}
+```
+
 **Read `validators.json`** (when present). Per-field validation rules from source product:
 
 ```json
