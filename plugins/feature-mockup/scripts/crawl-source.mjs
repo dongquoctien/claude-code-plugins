@@ -45,7 +45,17 @@ function* walk(dir) {
 
 function classify(absPath) {
   const lower = absPath.toLowerCase();
+  const rel = absPath.replace(/\\/g, '/');
   const base = path.basename(absPath);
+
+  // Global style partials in src/assets/scss/, src/scss/, src/styles/
+  // These are critical for prototypes to inherit real layout/component styles
+  // (e.g., oh-admin _layout.scss has .page-sidebar / .page-wrap / .page-logo;
+  // _buttons.scss has .btn / .btn-primary / .btn-xs/md/lg etc.)
+  if (/[\\/]assets[\\/]scss[\\/]/.test(rel) && /\.scss$/.test(base)) return 'global-scss';
+  if (/[\\/](scss|styles)[\\/]/.test(rel) && /\.scss$/.test(base) && !/[\\/]node_modules[\\/]/.test(rel)) return 'global-scss';
+  if (/[\\/]assets[\\/]css[\\/]/.test(rel) && /\.css$/.test(base)) return 'global-css';
+
   // Angular
   if (/\.component\.html$/.test(base)) return 'angular-template';
   if (/\.component\.ts$/.test(base)) return 'angular-component';
