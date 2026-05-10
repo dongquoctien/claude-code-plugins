@@ -35,6 +35,35 @@
         "imported": { "type": "boolean", "default": false },
         "path": { "type": "string", "default": ".claude/feature-mockup/theme" }
       }
+    },
+    "deployHistory": {
+      "type": "array",
+      "description": "Append-only log of /feature-mockup:deploy invocations. Capped at 20 most recent entries.",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["feature", "provider", "url", "deployedAt"],
+        "properties": {
+          "feature": { "type": "string" },
+          "provider": {
+            "type": "string",
+            "enum": ["netlify-drop", "surge", "cloudflare-pages", "github-pages"]
+          },
+          "url": { "type": "string", "format": "uri" },
+          "deployedAt": { "type": "string", "format": "date-time" },
+          "uploadDir": { "type": "string" },
+          "framework": {
+            "type": "string",
+            "description": "Prototype framework at deploy time (static-html, next, astro, etc.)"
+          },
+          "providerMeta": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Provider-specific fields: draftSiteId (netlify-drop), subdomain (surge), projectName (cloudflare-pages), repository (github-pages), expiresAt (netlify-drop only)."
+          }
+        }
+      }
     }
   }
 }
