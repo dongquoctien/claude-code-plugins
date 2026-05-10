@@ -138,6 +138,12 @@ Now do the actual work, in this order:
    ```
    Detects which icon library the project actually uses (FontAwesome / Lucide / Material / Heroicons / Phosphor / custom-svg / custom-png / none) and locates the brand logo (`header-logo*.png|svg`, `app-logo*.png|svg`). Without this, the agent defaults to Lucide and uses a text-only logo — which is wrong for any project using FontAwesome / Material / a real PNG logo. The icon library + logo path go into `manifest.brand` and `manifest.stack.iconLibrary` so the prototype-builder can pick the matching CDN and link the real logo image.
 
+2b2. **Dialog and toast patterns.** Run:
+   ```bash
+   node {pluginRoot}/scripts/detect-dialogs.mjs --in {projectRoot} --out {tmpDir}/dialog-detection.json
+   ```
+   Scans all framework templates and component classes for dialog/modal/toast usage. Output is a per-feature map of every `<app-dialog>`, `<kendo-dialog>`, `<mat-dialog>`, `<p-dialog>`, `<el-dialog>`, `<v-dialog>`, `<a-modal>`, `<Dialog>`, `<DialogContent>`, `<Modal>` with header text and modal size, plus a global toast/alert call count and message samples. Verified on oh-admin: detected 272 dialogs across 101 feature routes, 1208 toast/alert calls. Critical for the prototype-builder so it renders dialogs as overlays (not separate pages) and includes toast/snackbar feedback after submit actions.
+
 2c. **Source files — copy templates and components.** Run:
    ```bash
    node {pluginRoot}/scripts/crawl-source.mjs --in {projectRoot} --out {tmpDir}/source-copy
@@ -201,6 +207,7 @@ Now do the actual work, in this order:
        "globalsCss": "globals.css",
        "sourceIndex": "source-index.json",
        "iconDetection": "icon-detection.json",
+       "dialogDetection": "dialog-detection.json",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",
        "componentStylesRaw": "component-styles.raw.scss",

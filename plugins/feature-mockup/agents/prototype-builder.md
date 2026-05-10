@@ -132,6 +132,82 @@ For each screen:
 
 For `EmptyState`, `Toast`, success/error indicators, or any visual ornament: use a Lucide icon (see icon rules above). Never use emoji.
 
+### Dialogs / modals / overlays — render as DOM overlays, not separate pages
+
+This is one of the easiest things to get wrong. When the source has a CTA that opens a dialog (e.g., "New Hotel" button → opens an `<app-dialog header="Hotel Master" modalSize="lg" [visible]="...">`), the prototype must NOT render that as a separate `pages/edit.html` navigation. Real users experience it as an overlay on the same page. Dropping the overlay loses the entire UX.
+
+**Read `dialog-detection.json` from the imported theme.** It maps each feature route to the dialogs that route opens:
+
+```json
+"ho-hotel-contents": [
+  { "kind": "app-dialog", "header": "Hotel Master", "modalSize": "lg" },
+  { "kind": "app-dialog", "header": "Hotel Contents Mapping", "modalSize": "lg" },
+  { "kind": "app-dialog", "header": "Add Region", "modalSize": "sm" },
+  ...
+]
+```
+
+For each dialog the feature uses:
+
+1. Render it as a `<div class="modal-overlay" id="modal-<slug>" hidden>` block in the SAME prototype HTML file (NOT a separate page). Inside the overlay: `<div class="modal-window modal-{size}">` with the dialog header + close button + content.
+2. The CTA button that opens the dialog gets `onclick="document.getElementById('modal-<slug>').hidden=false"`.
+3. The modal close button (X icon) and any backdrop click get `onclick="document.getElementById('modal-<slug>').hidden=true"`.
+4. Submit buttons inside the modal trigger a toast (see toast section below) AND close the modal — they do NOT navigate away unless the source actually navigates.
+
+**CSS for the overlay pattern** (add to theme.css, sized to modal):
+
+```css
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-overlay[hidden] { display: none; }
+.modal-window { background: var(--color-bg-elevated); border-radius: var(--radius); max-height: 90vh; overflow: auto; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.modal-window.modal-sm { width: 480px; }
+.modal-window.modal-md { width: 720px; }
+.modal-window.modal-lg { width: 1080px; }
+.modal-window.modal-xl { width: 90vw; }
+.modal-titlebar { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--color-border); font-weight: 600; }
+.modal-titlebar .close { margin-left: auto; cursor: pointer; }
+.modal-content { padding: 16px; }
+.modal-footer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); justify-content: flex-end; }
+```
+
+**When to keep separate pages instead of overlays:**
+
+Some "screens" are real route navigations: a settings page reached via the sidebar nav, or a flow with permanent URL bookmarks. The signal: source has a `path:` route definition + `<router-outlet>` at that level. Then a separate file is correct.
+
+Default: if `dialog-detection.json` lists a header that matches the brief's screen, render that screen as an OVERLAY. Only fall back to a separate page when the brief explicitly asks for a dedicated screen for that flow.
+
+### Toasts and feedback messages
+
+`dialog-detection.json` `toasts.samples` lists actual messages used by the source product. After form submit / save / delete actions in the prototype, dispatch a toast that matches the source product's tone (Korean enterprise admins often use short clinical messages; consumer apps use friendlier copy).
+
+A minimal CSS toast for the html-tailwind template:
+
+```css
+.toast-host { position: fixed; bottom: 24px; right: 24px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 10px 14px; border-radius: var(--radius); background: var(--color-fg); color: var(--color-bg); font-size: var(--font-size-xs); box-shadow: 0 4px 12px rgba(0,0,0,.2); animation: toast-in .15s ease-out; }
+.toast.success { background: var(--color-success); color: #fff; }
+.toast.error   { background: var(--color-danger); color: #fff; }
+.toast.warning { background: var(--color-warning); color: #fff; }
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+```
+
+Tiny JS helper:
+
+```html
+<div class="toast-host" id="toasts"></div>
+<script>
+  function showToast(msg, kind) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + (kind || '');
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+</script>
+```
+
+Wire submit / delete / cancel buttons inside dialogs (or anywhere) to call `showToast('Saved successfully', 'success')` then close the modal.
+
 ### Admin-system component recipes
 
 When the admin shell is active (Step 5b), render brief components with these patterns instead of generic Tailwind cards:

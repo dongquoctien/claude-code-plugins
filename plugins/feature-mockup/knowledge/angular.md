@@ -103,6 +103,43 @@ When generating the admin shell:
 - Use FontAwesome icons matching each group's domain.
 - Even if the prototype only highlights ONE menu item as active, render the full 8 groups so the prototype looks like a real admin shell, not a stub.
 
+## Dialog / modal patterns — most admin actions open overlays, not new pages
+
+Angular admins rarely use route-based navigation for create/edit/detail flows. Instead they have a **state-driven dialog pattern**:
+
+```html
+<!-- Container template -->
+<button (click)="openDetailPopup()">New</button>
+
+<app-dialog
+  header="Hotel Master"
+  [visible]="isOpenDetailPopup$ | async"
+  modalSize="lg"
+  [modal]="true"
+  (visibleChange)="closeUpsertHandler()">
+  <app-hotel-detail [data]="..."></app-hotel-detail>
+</app-dialog>
+```
+
+The container holds an observable like `isOpenDetailPopup$` whose value gates the dialog. Click → service flips the observable to `true` → dialog renders. Close → flips back. NO route change, NO new URL.
+
+**oh-admin's `<app-dialog>` attributes:**
+- `header="..."` — title text shown in titlebar
+- `modalSize="sm" | "md" | "lg" | "xl"` — width preset (oh-admin sm=480, md=720, lg=1080, xl=90vw)
+- `modalContentClass="pd-all"` — adds padding to content
+- `[visible]="...$ | async"` — show/hide gate
+- `[modal]="true"` — backdrop blocks page interaction
+- `[hasScroll]="false"` — disables internal scroll for short dialogs
+- `[closable]="false"` — removes the X close button (forced flow)
+
+**For prototypes**: read `dialog-detection.json` for the feature route — every header listed there is a flow that should appear in the prototype as an overlay overlay (not a separate page). The button that opens it is usually:
+- In the same component as the dialog declaration (search the container's `.ts` for `openXxxPopup` / `Subject<boolean>`)
+- A toolbar button with a label matching the dialog header (e.g. "New" → "Hotel Master", "Contents Mapping" → "Hotel Contents Mapping")
+
+The control component (e.g. `*-control.component.html`) typically has the buttons that open these dialogs. Read it to confirm the trigger labels.
+
+**Toasts in oh-admin** are usually `alertService.alert(msg)` (custom Angular service) or `window.alert(msg)`. Render the prototype's submit-success feedback as a toast that briefly appears at bottom-right with the same tone as the source samples in `dialog-detection.json` `toasts.samples`.
+
 ## What the agent should do when reading source-index.json for an Angular project
 
 For ANY feature, navigate this way (most expensive last):
