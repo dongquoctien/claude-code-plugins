@@ -10,7 +10,7 @@ allowed-tools: Read, Bash, Glob
 
 Open a generated prototype in the user's default browser. Detect template (static HTML vs vite) and pick the right launch strategy.
 
-## Step 1 — Load config + resolve feature dir
+## Step 1 — Load config + resolve feature dir + auto-show resume hint
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
 > "Run `/feature-mockup:init` first."
@@ -25,6 +25,26 @@ featureDir = {projectRoot}/{outputDir}/{$ARGUMENTS}
 
 If `featureDir` does not exist, stop with:
 > "No mockup found at `{featureDir}`. Run `/feature-mockup:make {feature}` first, or check the spelling."
+
+### Resume hint — auto-show when timeline exists
+
+If `{featureDir}/.timeline.json` exists, run the timeline status command and surface a one-line summary BEFORE opening the browser:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs status --feature-dir "{featureDir}"
+```
+
+Parse the output. If `lastActivityAge` is more than 1 hour AND there are pending issues, print:
+
+```
+ℹ Resuming {feature}. Last activity {lastActivityAge}, phase {currentPhase}.
+  Pending: {p0} P0 + {p1} P1 + {p2} P2 issues. See STATUS.md for details.
+```
+
+If `lastActivityAge` is more than 24 hours, also offer:
+> "It's been a while since you worked on this. Open STATUS.md before previewing? (yes / skip)"
+
+When user picks yes, print the contents of `{featureDir}/STATUS.md` first, then continue with browser launch.
 
 ## Step 2 — Detect template + framework
 
@@ -202,6 +222,18 @@ Press Ctrl+C in the terminal where the server is running to stop it.
 - **Tunneled URL** (e.g. ngrok in dev script): capture both `http://localhost:{port}` and the tunnel URL — print both.
 - **Already-running server**: if user re-runs `/preview` for the same feature, check if the previous bash_id is still alive. If yes, just print the existing URL instead of spawning a duplicate. Use `TaskList` or `BashOutput` to inspect prior backgrounds.
 - **No browser GUI at all** (pure server / CI): print URL + skip the open command. Don't error.
+
+## Step N+1 — Log to timeline
+
+After the URL is printed, append a `preview` event:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind preview \
+  --summary "Opened prototype in browser ({prototypeFramework})" \
+  --data '{"url":"<url>","framework":"<prototypeFramework>"}'
+```
 
 ## Done
 

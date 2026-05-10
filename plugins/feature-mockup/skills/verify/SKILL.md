@@ -12,7 +12,7 @@ Compare a generated prototype side-by-side with a reference (live admin URL OR u
 
 **Core principle: ask the user questions at every uncertain choice.** Never silently assume scope, credentials, or comparison strategy.
 
-## Step 1 — Load config + resolve feature dir
+## Step 1 — Load config + resolve feature dir + show resume status
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
 > "Run `/feature-mockup:init` first."
@@ -21,6 +21,26 @@ Extract `outputDir` and `workingLanguage`.
 
 `$ARGUMENTS` = feature name. Resolve `featureDir = {outputDir}/{feature}`. If missing, stop:
 > "No mockup found at `{featureDir}`. Run `/feature-mockup:make {feature}` first."
+
+### Resume status — show when timeline has prior runs
+
+If `{featureDir}/.timeline.json` exists AND has prior verify events, surface a quick summary:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs status --feature-dir "{featureDir}"
+```
+
+Print, only when `totals.verifyRuns >= 1`:
+
+```
+ℹ This is verify run {N+1}. Previous verify ({lastActivityAge}) found {p0+p1+p2} issues;
+  {pendingCount} are still pending. Continue?
+```
+
+Use `AskUserQuestion`:
+1. **Continue with new verify** (Recommended) — full re-verify with current prototype
+2. **Skip verify, just regenerate report from existing screenshots** — when user just wants to re-read findings
+3. **Cancel**
 
 ## Step 2 — Pick reference source (ASK THE USER)
 
@@ -358,6 +378,39 @@ Use `AskUserQuestion`:
 > "Apply recommended fixes now via `/feature-mockup:fix`?"
 
 If yes, surface the fix prompts that should be passed.
+
+## Step N — Sync findings to timeline
+
+The comparison agent's `report.md` should also write a parallel JSON file at `{featureDir}/.verify/gaps.json` containing only the gap list (so timeline.mjs can ingest it). Have the agent emit BOTH report.md AND gaps.json.
+
+`gaps.json` shape (array):
+
+```json
+[
+  {"id": "gap-grid-col-04", "priority": "P0", "region": "data grid",
+   "description": "Missing 'Region' column"},
+  {"id": "gap-status-color", "priority": "P1", "region": "grid cells",
+   "description": "Status color wrong shade"}
+]
+```
+
+Gap ID conventions:
+- Slug from region + a stable identifier in the description
+- Reuse the same ID across re-verifies of the same feature when the issue is the same — preserves resolvedBy state
+
+Then sync to timeline:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs sync-gaps \
+  --feature-dir "{featureDir}" \
+  --gaps-file "{featureDir}/.verify/gaps.json"
+
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind verify \
+  --summary "Verify run <N>: <p0> P0 + <p1> P1 + <p2> P2 issues" \
+  --data '{"reportPath":".verify/report.md","gapsPath":".verify/gaps.json","referenceSource":"<live-url|user-screenshots|brief|both>","browserBackend":"<chrome-devtools-mcp|playwright-mcp|none>","p0":<n>,"p1":<n>,"p2":<n>,"screenshots":[<paths>]}'
+```
 
 ## Cleanup
 

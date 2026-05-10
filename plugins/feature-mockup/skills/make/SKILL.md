@@ -115,4 +115,23 @@ Open questions from analyzer:
 
 If `autoPreview === true` AND template is `html-tailwind`, suggest the user run `/feature-mockup:preview {feature}`.
 
+## Step N+1 — Log to timeline
+
+Append a `make` event to the feature's timeline so a returning BA sees what was done:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind make \
+  --summary "Generated {N}-screen prototype using {template} template{themeNote}" \
+  --data '{"template":"<template>","screenCount":<N>,"themeBranch":"<real-system|default>","briefPath":"brief.json"}'
+```
+
+This auto-creates `.timeline.json` and regenerates `STATUS.md` in the feature folder.
+
+Print one extra line at the end:
+```
+Status logged → {featureDir}/STATUS.md
+```
+
 Done.

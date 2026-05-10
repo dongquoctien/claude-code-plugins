@@ -314,6 +314,29 @@ Use `AskUserQuestion`:
 2. **No, I'll review manually first**
 3. **Open the prototype** (run `/feature-mockup:preview {feature}` first)
 
+## Step 8b — Sync to timeline
+
+After applying fixes, mark resolved gaps in the timeline:
+
+```bash
+# applied[] is the list of gap IDs that the user confirmed — pass them all
+node {pluginRoot}/scripts/timeline.mjs resolve-gaps \
+  --feature-dir "{featureDir}" \
+  --ids "<comma-separated gap IDs from applied[]>" \
+  --fix-event "evt-pending"   # placeholder; will be replaced by the actual event ID below
+
+# Append the fix event itself (this will return the new event ID)
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind fix \
+  --summary "Fix run <N>: applied <X> fixes (<P0count> P0 + <P1count> P1), skipped <Y>" \
+  --data '{"fixLogPath":".verify/fix-log-<ISO>.md","applied":[<ids>],"skipped":[<ids>],"themeDeviations":[<notes>]}'
+```
+
+The first call uses the placeholder `evt-pending`; the second call appends the event and prints its ID. If you want the resolved gaps' `resolvedBy` to reference the exact event, run resolve-gaps AGAIN with the real event ID after append. Or, simpler: run append first, parse the eventId from its output, then resolve-gaps with that ID.
+
+After timeline writes, the next time the user runs `/feature-mockup:preview` or `/feature-mockup:status`, the resume hint will reflect the new pending count (which may now be zero — phase becomes `fixed`).
+
 ## Step 9 — Final report
 
 Write `{featureDir}/.verify/fix-log-{ISO-date}.md`:

@@ -254,7 +254,9 @@ Expected: `200`. If the site is still propagating (Cloudflare Pages, GitHub Page
 If still not 200 after 1 minute, surface URL anyway with a note:
 > "Deploy command succeeded but the URL isn't reachable yet. CDN propagation can take a few minutes — try opening the URL in your browser shortly."
 
-## Step 8 — Save deploy history
+## Step 8 — Save deploy history + log to timeline
+
+### 8a. Global deploy history (in config)
 
 Read `.claude/feature-mockup.json`. Append to `deployHistory[]` (create the array if missing):
 
@@ -281,6 +283,20 @@ Read `.claude/feature-mockup.json`. Append to `deployHistory[]` (create the arra
 ```
 
 Cap the array at the 20 most recent entries. Older entries get truncated.
+
+### 8b. Per-feature timeline event
+
+Also append to the feature's own timeline so a returning BA sees deploys in STATUS.md:
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind deploy \
+  --summary "Deployed to <provider>" \
+  --data '{"provider":"<provider>","url":"<deployed-url>","expiresAt":"<for netlify-drop, ISO 1h after now>","providerMeta":<full meta object>}'
+```
+
+This regenerates `STATUS.md` with a Deployments section listing this URL plus any prior deploys.
 
 ## Step 9 — Print final report
 

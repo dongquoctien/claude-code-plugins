@@ -121,4 +121,22 @@ From now on /feature-mockup:make will use the real-system theme automatically.
 To re-import after a design system update, just run this skill again.
 ```
 
+## Step 7 — Log to feature timelines (when applicable)
+
+If this project has feature folders already (i.e. `outputDir` contains subdirectories with `brief.json` files), append a `theme-import` event to each one's timeline so future skill invocations know the theme was refreshed:
+
+```bash
+for featureDir in {outputDir}/*/; do
+  if [ -f "$featureDir/brief.json" ]; then
+    node {pluginRoot}/scripts/timeline.mjs append \
+      --feature-dir "$featureDir" \
+      --kind theme-import \
+      --summary "Theme imported from <source-name>@<version>: <X> tokens, <Y> components" \
+      --data '{"source":"<name>","version":"<version>","tokensCount":<X>,"componentsCount":<Y>,"themeDir":".claude/feature-mockup/theme"}'
+  fi
+done
+```
+
+When no features exist yet (first-time setup), skip this step.
+
 Done.
