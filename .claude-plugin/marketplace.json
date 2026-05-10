@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "dongquoctien-claude-plugins",
+  "owner": {
+    "name": "Dong Quoc Tien",
+    "email": "dev.vn@ohmyhotel.com",
+    "url": "https://github.com/dongquoctien"
+  },
+  "metadata": {
+    "description": "Personal Claude Code plugin marketplace — slash commands, skills, agents, and hooks for AI-driven workflows.",
+    "version": "0.1.0"
+  },
+  "plugins": []
+}
