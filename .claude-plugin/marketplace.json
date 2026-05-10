@@ -15,7 +15,7 @@
       "name": "feature-mockup",
       "source": "./plugins/feature-mockup",
       "description": "BA-friendly prototype generator. Turn a feature description plus screenshots/docs into a runnable HTML or React mockup, optionally themed with the team's real front-end design.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "category": "planning",
       "keywords": ["business-analyst", "prototype", "mockup", "planning", "design-system"]
     }

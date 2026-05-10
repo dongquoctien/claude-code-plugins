@@ -102,6 +102,28 @@ const scssVarsScored = scssVarFiles
   .sort((a, b) => b.score - a.score);
 if (scssVarsScored[0]) tokenSourceCandidates.push({ type: 'scss-vars', path: scssVarsScored[0].path });
 
+// Detect active theme variant for multi-theme systems (Angular/Vue admin patterns).
+// Look for `setAttribute('data-theme', ...)` or themeList[0] in theme service files.
+let activeThemeVariant = null;
+const themeServiceCandidates = [
+  'src/app/layout/components/theme/theme.component.ts',
+  'src/app/shared/theme/theme.service.ts',
+  'src/app/core/theme/theme.service.ts',
+  'src/services/theme.service.ts',
+];
+for (const tc of themeServiceCandidates) {
+  if (!exists(tc)) continue;
+  try {
+    const content = fs.readFileSync(path.join(ROOT, tc), 'utf8');
+    // First themeList entry is usually the default
+    const tl = content.match(/themeList\s*=\s*\[\s*\{\s*title:\s*['"]([^'"]+)['"]/);
+    if (tl) { activeThemeVariant = tl[1]; break; }
+    // Fallback: look for default attribute setter
+    const da = content.match(/setAttribute\(['"]data-theme['"]\s*,\s*['"]([^'"]+)['"]/);
+    if (da) { activeThemeVariant = da[1]; break; }
+  } catch {}
+}
+
 // CSS variables — score by content (count of -- declarations) and prefer compiled theme files
 const cssVarCandidates = [
   ...stylesEntries.filter(p => p.endsWith('.css')),
@@ -152,15 +174,36 @@ if (tokenSourceCandidates.length === 0) {
   warnings.push('No token source candidates found. Falling back to defaults during extraction.');
 }
 
+// ─── Routes (admin menu source) ───────────────────────────────────────
+// For Angular admins, src/app/routes/<feature-name>/ is a strong signal of menu structure.
+// We don't fully parse routing.module.ts (too varied), but we surface the folder list so the
+// crawl-components / prototype-builder can use it to seed realistic nav items.
+let routesDir = null;
+const routeDirCandidates = ['src/app/routes', 'src/app/pages', 'src/views', 'src/pages', 'app/routes'];
+for (const rd of routeDirCandidates) {
+  if (exists(rd) && fs.statSync(path.join(ROOT, rd)).isDirectory()) { routesDir = rd; break; }
+}
+let routes = [];
+if (routesDir) {
+  try {
+    routes = fs.readdirSync(path.join(ROOT, routesDir), { withFileTypes: true })
+      .filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'))
+      .map(e => e.name);
+  } catch {}
+}
+
 // ─── Output ───────────────────────────────────────────────────────────
 const result = {
   framework,
   frameworkVersion,
   css,
   uiLib,
+  activeThemeVariant,   // null when not multi-theme; otherwise the title of themeList[0]
   stylesEntries,
   componentDirs,
   tokenSourceCandidates,
+  routesDir,
+  routes: routes.slice(0, 100),  // cap so JSON stays reasonable
   packageName: pkg.name || null,
   packageVersion: pkg.version || null,
   warnings,

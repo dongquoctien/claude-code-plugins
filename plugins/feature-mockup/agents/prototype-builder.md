@@ -85,21 +85,34 @@ For `EmptyState`, `Toast`, success/error indicators, or any visual ornament: use
 
 When the admin shell is active (Step 5b), render brief components with these patterns instead of generic Tailwind cards:
 
-- **Table** — wrap in `<div class="k-grid"><table>`. Header cells use `<th>` with `text-align: left`. Body rows have hover state from theme.css. For multi-select tables, the first `<th>` and `<td>` is a 36px-wide checkbox column. Right-align numeric columns with `<td style="text-align:right;">`.
+- **Table (k-grid)** — wrap in `<div class="k-grid"><div class="k-grid-scroll"><table>`. Header `<th>` cells use light grey bg, separated by 1px right border. Each body row uses **two lines per cell** — the primary value first, then a `<span class="row-line2">` with smaller muted secondary info (e.g. `BK-2026-0142` line 1, `1128814857440366` line 2). For multi-select tables, the first column is a 36px-wide checkbox. Booking IDs in the first column are rendered as `<a class="booking-id">` (underlined primary-darken).
 
-- **Toolbar above tables** — `<div class="toolbar">` containing summary text on the left, action buttons on the right via `<div class="ml-auto flex gap-2">`. Always show a count like "4 / 6 đã chọn" + total value when relevant.
+- **Status columns — plain colored text, NOT badges.** oh-admin and most enterprise admins display "Confirmed", "Reserved", "Cancelled(Replied)" as bold colored text inline, not as pill badges:
+  ```html
+  <span class="status-confirmed">Confirmed</span>
+  <span class="status-cancelled">Cancelled(Replied)</span>
+  ```
+  Reserve `<span class="badge">` strictly for tag-like labels (e.g. status filter chips), never for inline status display. Default to plain colored text and only switch to badges when the user explicitly asks.
 
-- **Filters / search bar** — wrap inputs in `<div class="card"><div class="grid-3">`. Each filter is a `<div>` with `<label class="field-label">` + input. Search/Reset buttons live in a flex container in the last grid cell.
+- **Payment status pattern** — when a row has Booking Status + Payment Status, the payment cell often shows two stacked checkbox-prefixed lines (`☐ Not Paid`, `☑ Paid`) for the two payment legs. Use `<span class="status-paid-not">` and `<span class="status-paid">` for these.
+
+- **Filters / search bar** — flat region with `<div class="filter-area">` + `<div class="filter-grid">` using a labeled grid (`90px 240px 90px 240px 90px 240px`). Search/Reset buttons absolute-positioned top-right via `<div class="filter-actions">`. Add a centered chevron-down at bottom for "more filters".
+
+- **Grid toolbar** — `<div class="grid-toolbar">` with a left `<span class="grid-count">` (just the number, bold, large) and right `<div class="grid-toolbar-actions">` (page-size select + bulk actions).
+
+- **Pagination** — `<div class="pagination">` with `«`, `‹`, page numbers (one `.page-num.active`), `›`, `»`, ellipsis "..." for skipped ranges, and a right-anchored `<span class="summary">1 - 20 of 539 items</span>`.
+
+- **Footer actions** — `<div class="page-footer">` with right-aligned secondary buttons like Grid Save / Grid Reset.
 
 - **Stat cards** for results screens — three or four `<div class="card stat-card">` blocks each with `<span class="stat-label">` (small grey) + `<span class="stat-value">` (large bold). Color the value with `--color-success` or `--color-danger` based on intent.
 
-- **Alert banners** — `<div class="alert">` with a Lucide icon + message. Border-left 3px solid in info/success/warning/danger color.
+- **Alert banners** — `<div class="alert alert-info|alert-success|alert-warning">` with a Lucide icon + message. Border-left 3px solid.
 
 - **Summary panels** — for confirm screens, render a 2-column layout `style="grid-template-columns: 2fr 1fr"`: detail table on the left, summary card on the right with stat-style key→value pairs.
 
-- **Per-row actions** in result tables — the last column is "Hành động" with text links like `<a style="color: var(--color-primary-darken)">Xem chi tiết</a>`.
+- **Per-row actions** in result tables — the last column is "Action(s)" with text links: `<a class="btn-link">Xem chi tiết</a>`. Avoid filled buttons inside grid rows.
 
-The goal is dense admin UI: small fonts (`var(--font-size-xs)` ≈ 12px), tight padding, lots of information per screen.
+The goal is dense admin UI: small fonts (`var(--font-size-xs)` ≈ 12px), tight padding, lots of information per screen, two-line rows in grids, plain text status indicators.
 - Render CTAs as styled buttons. `action: "navigate:<id>"` becomes a link to that screen. `action: "submit"` shows an alert/toast then navigates to the next screen in `flow`.
 
 ### Icon rules (no emojis — ever)
@@ -168,41 +181,112 @@ For `react-vite`, this is a `<PrototypeNav />` component rendered in the layout.
 
 Read `{themeDir}/source-manifest.json` if `themeBranch === "real-system"`. When `stack.uiLib` is one of `kendo`, `material`, `antd`, `chakra` — OR when the original framework is Angular/Vue with no UI library AND the imported tokens include `--color-sidebar-bg` — wrap every screen in a full admin layout instead of the centered single-column layout.
 
-Layout structure (HTML):
+### Admin shell anatomy (verified against oh-admin)
+
+A faithful admin shell has SEVEN regions, top to bottom:
+
+1. **Topbar (50px)** — hamburger toggle on the left, then a flex spacer pushing everything right: language switcher, optional product link ("ELLIS Playbook"-style), user pill (e.g. "TOM (90049)"), action links (Change Password, Logout), then a small round avatar at the far right. Page title does NOT live in the topbar.
+
+2. **Tab bar (~36px)** — admin systems with a multi-tab workspace render the open feature as a tab card just under the topbar (e.g. "★ Hotel Bookings ✕"). The tab uses the page background (slightly off-white) with rounded top corners. When the source uses tabs, render this; do NOT put the page title in the topbar — the tab IS the title.
+
+3. **Filter area** — flat, NO card border, sits directly on white with a bottom border. Layout is a labeled grid (typically `90px 240px 90px 240px 90px 240px` for label/input pairs). Search and Reset buttons absolute-positioned top-right of the area. A tiny "expand" chevron at the bottom-center signals collapsible filters.
+
+4. **Grid toolbar** — a left summary count (e.g. plain bold "539") + right action cluster (Booking List / Data Download / "20 ▼" page-size). NOT centered, NOT in a card.
+
+5. **Data grid** — `.k-grid` table with a light grey header row, single-row body cells where each cell contains a primary line + a secondary line (the `.row-line2` class) with smaller muted text. Status columns use plain colored TEXT, not pill badges (`.status-confirmed`, `.status-cancelled` etc.). Booking IDs are underlined links in the primary color.
+
+6. **Pagination** — centered numeric pagination with `« ‹ 1 2 3 ... 10 ... › »` and a right-aligned `1 - 20 of 539 items` summary text.
+
+7. **Footer actions** — small button row aligned right with grid-management actions like "Grid Save / Grid Reset". Distinct from the page content area.
+
+When generating an admin screen, use these regions verbatim — each one is what makes the prototype "feel" like a real admin system rather than a marketing site.
+
+### Sidebar — use real menu data when available
+
+Read `manifest.stack.routes` from the source manifest. When non-empty, that's a list of folder names from the source app's routes directory (e.g. `ho-hotel-contents`, `bs-menu`, `av-reservation-list-ota`). Use them to seed realistic menu labels — strip the 2-letter domain prefix and convert to Title Case:
+
+| folder name | menu label |
+|---|---|
+| `ho-hotel-contents` | Hotel Contents |
+| `bs-menu` | Menu |
+| `av-reservation-list-ota` | Reservation List (OTA) |
+| `sm-seller` | Seller |
+
+Group menu items by their prefix (`ho-` → Hotels, `bs-` → System / Common, `av-` → Reservations, `sm-` → Sellers, `ad-` → Dashboard, `ac-` → Payments). Pick the most-relevant 8–12 for the visible Favorites list, then nest the rest under collapsible groups (Bookings → Common / Flights / Hotels / Cars).
+
+When `manifest.stack.routes` is empty/missing, ask the user for the menu structure or fall back to a generic 5-item list.
+
+### Sidebar — search box
+
+Admin sidebars often include a menu-search input (`Enter the menu name.`) at the top under the logo. Render this when the imported manifest's `stack.uiLib` is `kendo` or when `routes.length > 30` (long menus need search).
+
+### Layout structure (HTML)
 
 ```html
 <body>
   <div class="layout">
     <aside class="page-sidebar">
-      <div class="page-logo">{appName}</div>
-      <ul class="nav-menu">
-        <!-- 5–8 fake nav items relevant to the feature's domain.
-             Mark the item that contains the current feature as class="active". -->
-        <li class="active"><a href="#"><i data-lucide="calendar-check" class="w-4 h-4"></i><span>Booking</span></a></li>
-        ...
-      </ul>
+      <div class="page-logo">
+        <span class="logo-cyan">◐</span>
+        <span>{ALL-CAPS BRAND NAME}<span class="logo-cyan">&</span>{SECOND-WORD}</span>
+      </div>
+
+      <div class="nav-search">
+        <div class="nav-search-wrap">
+          <input type="search" placeholder="Enter the menu name." />
+          <i data-lucide="search" class="w-3 h-3"></i>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">
+          <i data-lucide="star" class="w-3 h-3 star"></i>
+          <span>Favorites</span>
+        </div>
+        <ul class="nav-menu">
+          <!-- mark the current feature with class="active has-dot" -->
+          <li class="active has-dot"><a href="#"><span>{Real menu item from routes}</span></a></li>
+          ...
+        </ul>
+      </div>
+
+      <div class="nav-group expanded">
+        <div class="nav-group-title">
+          <i data-lucide="monitor" class="w-3 h-3"></i>
+          <span>{Domain group, e.g. Bookings}</span>
+          <i data-lucide="chevron-down" class="w-3 h-3 chev"></i>
+        </div>
+        <!-- nested subgroups with chevron toggles -->
+      </div>
     </aside>
+
     <div class="main">
       <header class="page-header">
-        <h1 class="page-title">{screen.title}</h1>
-        <span class="breadcrumb"><a href="#">Booking</a> / <a href="#">Quản lý</a> / {screen.title}</span>
-        <div class="ml-auto flex gap-2">
-          <i data-lucide="bell" class="w-4 h-4"></i>
-          <i data-lucide="user-circle" class="w-5 h-5"></i>
-        </div>
+        <div class="hamburger"><i data-lucide="menu" class="w-4 h-4"></i></div>
+        <div class="topbar-spacer"></div>
+        <a class="topbar-link" href="#"><i data-lucide="globe" class="w-3 h-3"></i> English</a>
+        <a class="topbar-link" href="#"><i data-lucide="book-open" class="w-3 h-3"></i> {Product link}</a>
+        <span class="topbar-divider"></span>
+        <span class="user-pill">{User name (ID)}</span>
+        <a class="topbar-link" href="#">Change Password</a>
+        <a class="topbar-link" href="#">Logout</a>
+        <div class="user-avatar"></div>
       </header>
-      <div class="page-content">
-        <!-- screen body here: filters, table, forms, summary cards, alerts -->
+
+      <div class="tab-bar">
+        <div class="tab active">
+          <span class="tab-star">★</span>
+          <span>{Tab title — same as Favorites label}</span>
+          <span class="tab-close"><i data-lucide="x" class="w-3 h-3"></i></span>
+        </div>
       </div>
+
+      <!-- filter area + grid toolbar + .k-grid + pagination + page-footer -->
     </div>
   </div>
   <!-- Prototype Navigator (existing) -->
 </body>
 ```
-
-Pick `appName` from `manifest.name` in the source manifest (e.g., "oh-admin"). Pick the active nav item by matching the feature's domain to one of the nav labels you generate.
-
-The `theme.css` already provides `.page-sidebar`, `.page-logo`, `.nav-menu`, `.page-header`, `.layout`, `.main` classes.
 
 When the target is a customer-facing site (no admin signals — no Kendo/Material/AntD, no `--color-sidebar-bg`), keep the centered single-column layout from Step 4.
 

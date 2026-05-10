@@ -45,6 +45,18 @@ Real-world admin systems (oh-admin, etc.) often ship BOTH a compiled `*-theme.cs
 
 Use shallow merge per category, not whole-file. The final `tokens.json` should contain every distinct color from CSS plus the radius/sizing values from SCSS.
 
+### Multi-theme variant selection
+
+When the source manifest's `stack.activeThemeVariant` is set (e.g. `"sky-black"`, `"basic"`, `"sky"`), pass it to `crawl-styles.mjs` via `--theme-variant <name>`. The script reads `:root` first, then overlays the `html[data-theme=<variant>]` block on top — this picks up the correct palette for that variant.
+
+If `activeThemeVariant` is null but the CSS file contains multiple `html[data-theme=...]` blocks, ASK THE USER which variant to use before running. Picking the wrong one produces a prototype with the right colors but wrong theme (e.g. dark sidebar when the real product uses a light one). The pluggable theme variants in oh-admin's case are:
+- `sky-black` — primary cyan + theme-color2:#333 (dark sidebar)
+- `sky` — primary cyan + theme-color2:#fff (light sidebar)
+- `base` — primary orange + theme-color2:#333 (dark sidebar)
+- `basic` — primary orange + theme-color2:#fff (light sidebar)
+
+The user-facing question must include the visible difference: "Which theme variant matches the product UI you're trying to mirror? Variant `sky` has a light sidebar with cyan accents; variant `sky-black` has a dark sidebar."
+
 The script's output `tokens.json` follows this canonical shape:
 
 ```json

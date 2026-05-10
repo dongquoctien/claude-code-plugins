@@ -16,9 +16,12 @@ const SOURCE_TYPE = arg('--type', null);   // tailwind | tokens-json | scss-vars
 const SOURCE_PATH = arg('--path', null);   // relative to ROOT
 const OUT = path.resolve(arg('--out', './tokens.json'));
 const GLOBALS_OUT = arg('--globals-out', null);
+// Optional: when CSS file has multiple `html[data-theme=X]` blocks, pick the one named here.
+// If not given, falls back to `:root`.
+const THEME_VARIANT = arg('--theme-variant', null);
 
 if (!SOURCE_TYPE || !SOURCE_PATH) {
-  console.error('Usage: crawl-styles.mjs --in <root> --type <tailwind|tokens-json|scss-vars|css-vars> --path <relative> --out <tokens.json> [--globals-out <globals.css>]');
+  console.error('Usage: crawl-styles.mjs --in <root> --type <tailwind|tokens-json|scss-vars|css-vars> --path <relative> --out <tokens.json> [--globals-out <globals.css>] [--theme-variant <name>]');
   process.exit(2);
 }
 
@@ -153,12 +156,24 @@ function fromScssVars(filePath) {
 }
 
 // ─── CSS variables ────────────────────────────────────────────────────
+// Reads :root by default. When --theme-variant is set and the CSS has
+// `html[data-theme=<variant>] { ... }` blocks, those overlay :root.
 function fromCssVars(filePath) {
   const css = fs.readFileSync(filePath, 'utf8');
   const vars = {};
+  // Always read :root first
   for (const r of css.matchAll(/:root\s*\{([^}]+)\}/gm)) {
     for (const m of r[1].matchAll(/--([a-zA-Z0-9-]+)\s*:\s*([^;]+);/g)) {
       vars[m[1].trim().toLowerCase()] = m[2].trim();
+    }
+  }
+  // Then overlay the chosen theme variant
+  if (THEME_VARIANT) {
+    const variantRe = new RegExp(`html\\[data-theme=${THEME_VARIANT}\\]\\s*\\{([^}]+)\\}`, 'gm');
+    for (const r of css.matchAll(variantRe)) {
+      for (const m of r[1].matchAll(/--([a-zA-Z0-9-]+)\s*:\s*([^;]+);/g)) {
+        vars[m[1].trim().toLowerCase()] = m[2].trim();
+      }
     }
   }
   return classifyVars(vars);
