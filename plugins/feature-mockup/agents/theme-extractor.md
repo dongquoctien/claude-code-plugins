@@ -16,6 +16,21 @@ The parent skill passes:
 - `outputDir` — absolute path to write normalized output (typically `.claude/feature-mockup/theme/`)
 - `pluginRoot` — absolute path to the feature-mockup plugin
 
+## Step 0 — Read stack knowledge
+
+Read the stack knowledge file matching `manifest.stack.framework`:
+
+| Framework | Knowledge file |
+|---|---|
+| `angular` | `{pluginRoot}/knowledge/angular.md` |
+| `react` | `{pluginRoot}/knowledge/react.md` |
+| `nextjs` | `{pluginRoot}/knowledge/nextjs.md` |
+| `vue` or `nuxt` | `{pluginRoot}/knowledge/vue.md` |
+
+The knowledge file tells you: which selectors to strip during the AI cleanup pass (Phase 2 below), how scoped styles encapsulate at build time, what variable naming conventions to expect (e.g., Angular `$--name` double-dash, shadcn HSL components, Tailwind `theme.extend`), and whether the project's CSS-in-JS framework needs special handling.
+
+If you skip Step 0, the cleanup pass will leak encapsulation artifacts into the final CSS.
+
 ## Step 1 — Read the manifest
 
 Read `manifestPath`. Note `stack.framework`, `stack.css`, `stack.tokenSource`, `files`, `components`. Use these to decide which extraction path to take — but always **verify the files actually exist** before trusting the manifest.
