@@ -102,9 +102,11 @@ const scssVarsScored = scssVarFiles
   .sort((a, b) => b.score - a.score);
 if (scssVarsScored[0]) tokenSourceCandidates.push({ type: 'scss-vars', path: scssVarsScored[0].path });
 
-// Detect active theme variant for multi-theme systems (Angular/Vue admin patterns).
-// Look for `setAttribute('data-theme', ...)` or themeList[0] in theme service files.
+// Detect active theme variant + ALL available variants for multi-theme systems
+// (Angular/Vue admin patterns). The full list lets the prototype render a
+// runtime variant switcher that demos brand multi-tenancy in one prototype.
 let activeThemeVariant = null;
+let themeVariants = [];
 const themeServiceCandidates = [
   'src/app/layout/components/theme/theme.component.ts',
   'src/app/shared/theme/theme.service.ts',
@@ -115,13 +117,50 @@ for (const tc of themeServiceCandidates) {
   if (!exists(tc)) continue;
   try {
     const content = fs.readFileSync(path.join(ROOT, tc), 'utf8');
-    // First themeList entry is usually the default
-    const tl = content.match(/themeList\s*=\s*\[\s*\{\s*title:\s*['"]([^'"]+)['"]/);
-    if (tl) { activeThemeVariant = tl[1]; break; }
+    // Parse the whole themeList array to capture every variant
+    const listBlockMatch = content.match(/themeList\s*=\s*\[([\s\S]*?)\]/);
+    if (listBlockMatch) {
+      const block = listBlockMatch[1];
+      const variantRe = /\{\s*title:\s*['"]([^'"]+)['"]\s*,\s*value:\s*['"]([^'"]+)['"]/g;
+      let vm;
+      while ((vm = variantRe.exec(block)) !== null) {
+        themeVariants.push({ title: vm[1], value: vm[2] });
+      }
+      // Fallback: { title: 'Sky' } only — value === title.toLowerCase()
+      if (themeVariants.length === 0) {
+        const titleOnlyRe = /\{\s*title:\s*['"]([^'"]+)['"]/g;
+        let tm;
+        while ((tm = titleOnlyRe.exec(block)) !== null) {
+          themeVariants.push({ title: tm[1], value: tm[1].toLowerCase() });
+        }
+      }
+      if (themeVariants[0]) activeThemeVariant = themeVariants[0].value || themeVariants[0].title;
+      if (activeThemeVariant) break;
+    }
     // Fallback: look for default attribute setter
     const da = content.match(/setAttribute\(['"]data-theme['"]\s*,\s*['"]([^'"]+)['"]/);
     if (da) { activeThemeVariant = da[1]; break; }
   } catch {}
+}
+
+// Also scan the global theme.css / styles.scss for `html[data-theme=X]` blocks —
+// this is the source-of-truth: any variant declared in CSS is renderable, even if
+// the theme service doesn't list it.
+const cssVariantSet = new Set();
+for (const cssPath of [...stylesEntries, 'src/assets/css/theme.css', 'src/styles.css']) {
+  if (!exists(cssPath)) continue;
+  try {
+    const content = fs.readFileSync(path.join(ROOT, cssPath), 'utf8');
+    const re = /html\[data-theme=['"]?([a-zA-Z0-9_-]+)['"]?\]/g;
+    let m;
+    while ((m = re.exec(content)) !== null) cssVariantSet.add(m[1]);
+  } catch {}
+}
+// Merge: any CSS variant not in themeVariants gets added with title === value
+for (const v of cssVariantSet) {
+  if (!themeVariants.some(tv => tv.value === v || tv.title === v)) {
+    themeVariants.push({ title: v.charAt(0).toUpperCase() + v.slice(1), value: v });
+  }
 }
 
 // CSS variables — score by content (count of -- declarations) and prefer compiled theme files
@@ -199,6 +238,7 @@ const result = {
   css,
   uiLib,
   activeThemeVariant,   // null when not multi-theme; otherwise the title of themeList[0]
+  themeVariants,        // all declared variants [{ title, value }]; empty when single-theme
   stylesEntries,
   componentDirs,
   tokenSourceCandidates,

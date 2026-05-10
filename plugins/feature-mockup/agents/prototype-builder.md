@@ -54,6 +54,7 @@ Before generating any prototype HTML, read the stack knowledge file matching `ma
 | `react` | `{pluginRoot}/knowledge/react.md` |
 | `nextjs` | `{pluginRoot}/knowledge/nextjs.md` |
 | `vue` or `nuxt` | `{pluginRoot}/knowledge/vue.md` |
+| `svelte` or `sveltekit` | `{pluginRoot}/knowledge/svelte.md` |
 | Other | Skip — fall back to generic patterns from this file |
 
 These knowledge files contain framework-specific quirks: how styles flow at build, what selectors to strip (`_ngcontent`, `[data-v-...]`, `::ng-deep`, `:host`), how to translate framework template syntax (`*ngFor`, `v-for`, `{children}`) to static HTML, what imports to drop (`next/image`, `next/link`, `vue-router`), and which UI library conventions to mirror (Kendo classes, shadcn variants, Vuetify selectors).
@@ -217,6 +218,91 @@ function onSave<Entity>(e) {
 ```
 
 This way the prototype's UX flow MATCHES what the dev wrote in source, not the agent's guess.
+
+### Cross-screen state + flow navigation (multi-screen prototypes)
+
+When `brief.flow.length > 1`, the prototype is a **multi-screen demo**. Reviewers click through Search → Results → Detail → Confirm. State must persist across navigations (e.g. selected row IDs, form draft, search filters) — otherwise clicking "Confirm" loses everything.
+
+**Shared store via localStorage** — every screen loads the same script:
+
+```js
+// state-store.js  (inline-included in every screen, or imported via <script src>)
+const STORE_KEY = 'proto:<feature-route>:store';
+
+const store = {
+  get(key, fallback = null) {
+    try {
+      const all = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      return key in all ? all[key] : fallback;
+    } catch { return fallback; }
+  },
+  set(key, value) {
+    const all = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    all[key] = value;
+    localStorage.setItem(STORE_KEY, JSON.stringify(all));
+  },
+  clear() { localStorage.removeItem(STORE_KEY); }
+};
+```
+
+**Pass state across screens** via the store:
+
+```js
+// On Results screen: user selects rows, clicks "Cancel selected"
+const selectedIds = [...document.querySelectorAll('input[name="row-select"]:checked')].map(c => c.value);
+store.set('selectedIds', selectedIds);
+window.location.href = './confirm.html';
+
+// On Confirm screen: read what Results passed
+const ids = store.get('selectedIds', []);
+if (ids.length === 0) {
+  // User landed here without selecting — bounce back
+  alert('No items selected. Returning to results.');
+  window.location.href = './results.html';
+}
+```
+
+**Form draft persistence** — when user fills a form on screen A and the brief flow says A → B → A (e.g. preview-then-edit), persist the form draft so screen A on return doesn't blank out:
+
+```js
+// On screen A: save draft on every input change
+document.getElementById('main-form').addEventListener('input', e => {
+  const data = Object.fromEntries(new FormData(e.target.form));
+  store.set('draft', data);
+});
+
+// On load: rehydrate
+window.addEventListener('DOMContentLoaded', () => {
+  const draft = store.get('draft');
+  if (!draft) return;
+  for (const [k, v] of Object.entries(draft)) {
+    const el = document.querySelector(`[name="${k}"]`);
+    if (el) el.value = v;
+  }
+});
+```
+
+**"Submit" CTA navigation** — when a button has `action: "submit"` in the brief:
+1. Validate form (using `validators.json` rules — see Form Validation section).
+2. Run the events.json action chain (toast + store mutation).
+3. Navigate to the **next** screen in `brief.flow` (not the screen index — find current screen ID in `flow`, go to `flow[i+1]`).
+4. Pass mutation result via `store.set('lastResult', { id, status })` so the next screen can show success message with the new ID.
+
+**Breadcrumb component** — when `brief.flow.length >= 3`, render a breadcrumb above the page title:
+
+```html
+<nav class="breadcrumb">
+  <a href="../index.html">Search</a>
+  <span class="sep">›</span>
+  <a href="./results.html">Results</a>
+  <span class="sep">›</span>
+  <span class="current">Confirm</span>
+</nav>
+```
+
+Build it from `brief.flow` — current screen is the rightmost item (no link), prior screens link back. Use `brief.copy[screenId].title` for label text. Skip breadcrumb when flow has only 1 or 2 screens (clutters small flows).
+
+**Clear store on flow restart** — when reviewer reaches the final screen (e.g. "success") AND clicks a "Done" or "Start over" button, call `store.clear()` so the next demo run starts clean. Also clear when the URL has `?reset=1`.
 
 **Read `business-rules.json`** (when present). Conditional alerts + error messages + constants:
 
@@ -595,7 +681,7 @@ Wire submit / delete / cancel buttons inside dialogs (or anywhere) to call `show
 
 When the admin shell is active (Step 5b), render brief components with these patterns instead of generic Tailwind cards:
 
-- **Table (k-grid)** — wrap in `<div class="k-grid"><div class="k-grid-scroll"><table>`. Header `<th>` cells use light grey bg, separated by 1px right border. Each body row uses **two lines per cell** — the primary value first, then a `<span class="row-line2">` with smaller muted secondary info (e.g. `BK-2026-0142` line 1, `1128814857440366` line 2). For multi-select tables, the first column is a 36px-wide checkbox. Booking IDs in the first column are rendered as `<a class="booking-id">` (underlined primary-darken).
+- **Table (k-grid)** — wrap in `<div class="k-grid"><div class="k-grid-scroll"><table>`. Header `<th>` cells use light grey bg, separated by 1px right border. Each body row uses **two lines per cell** — the primary value first, then a `<span class="row-line2">` with smaller muted secondary info. **Read `route-patterns.json`** `cellPatterns[<route>]`: each entry tells you which `field` columns should render two-line. For unlisted columns, render single-line. When no two-line cell signature is detected, default to single-line for all cells. For multi-select tables, the first column is a 36px-wide checkbox. Primary-key columns (booking IDs, hotel codes, order numbers) are rendered as `<a class="primary-link">` (underlined primary-darken).
 
 - **Status columns — plain colored text, NOT badges.** Most enterprise admins display "Confirmed", "Reserved", "Cancelled(Replied)" as bold colored text inline, not as pill badges:
   ```html
@@ -606,7 +692,7 @@ When the admin shell is active (Step 5b), render brief components with these pat
 
 - **Payment status pattern** — when a row has Booking Status + Payment Status, the payment cell often shows two stacked checkbox-prefixed lines (`☐ Not Paid`, `☑ Paid`) for the two payment legs. Use `<span class="status-paid-not">` and `<span class="status-paid">` for these.
 
-- **Filters / search bar** — flat region with `<div class="filter-area">` + `<div class="filter-grid">` using a labeled grid (`90px 240px 90px 240px 90px 240px`). Search/Reset buttons absolute-positioned top-right via `<div class="filter-actions">`. Add a centered chevron-down at bottom for "more filters".
+- **Filters / search bar** — flat region with `<div class="filter-area">` + `<div class="filter-grid">` using a labeled grid. **Read `route-patterns.json`** first: if `filterGrids[<feature-route-name>]` exists, use its `template` value as the `grid-template-columns` (e.g. `"90px 240px 90px 260px"` for 2 pairs with 1 date picker). Fall back to `90px 240px 90px 240px 90px 240px` (3 pairs) only when route-patterns.json is absent or doesn't cover this route. Search/Reset buttons absolute-positioned top-right via `<div class="filter-actions">`. Add a centered chevron-down at bottom for "more filters".
 
 - **Grid toolbar** — `<div class="grid-toolbar">` with a left `<span class="grid-count">` (just the number, bold, large) and right `<div class="grid-toolbar-actions">` (page-size select + bulk actions).
 
@@ -697,6 +783,114 @@ For `html-tailwind`, this is a fixed-position `<nav>` injected at the bottom of 
 
 For `react-vite`, this is a `<PrototypeNav />` component rendered in the layout. React-router handles paths so no per-file rewriting needed.
 
+### Language switcher (i18n labels from source)
+
+When `{themeDir}/i18n.json` exists AND `i18n.locales.length > 1`, the source product is multilingual. Render a language switcher in the topbar so reviewers can demo the localized UX:
+
+```html
+<div class="lang-switcher">
+  <select id="lang-select">
+    <option value="ko">한국어</option>
+    <option value="en">English</option>
+    <option value="ja">日本語</option>
+    <option value="vi">Tiếng Việt</option>
+  </select>
+</div>
+
+<script>
+  const I18N = /* paste i18n.labels from i18n.json */;
+  const langKey = 'proto:lang';
+  const defaultLang = '<i18n.defaultLocale>';
+  let currentLang = localStorage.getItem(langKey) || defaultLang;
+
+  function applyLang(lang) {
+    currentLang = lang;
+    localStorage.setItem(langKey, lang);
+    document.documentElement.setAttribute('lang', lang);
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      el.textContent = I18N[lang]?.[key] ?? I18N[defaultLang]?.[key] ?? key;
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const key = el.dataset.i18nPlaceholder;
+      el.placeholder = I18N[lang]?.[key] ?? I18N[defaultLang]?.[key] ?? key;
+    });
+  }
+
+  document.getElementById('lang-select').value = currentLang;
+  document.getElementById('lang-select').addEventListener('change', e => applyLang(e.target.value));
+  applyLang(currentLang);
+</script>
+```
+
+**Wire labels via `data-i18n` attribute.** When you find a label key in `i18n.labels`, use the attribute pattern instead of hardcoding text:
+
+```html
+<!-- Before (hardcoded) -->
+<button>Search</button>
+<input placeholder="Enter the menu name." />
+
+<!-- After (i18n-aware) -->
+<button data-i18n="common.search">Search</button>
+<input data-i18n-placeholder="sidebar.menuSearch" placeholder="Enter the menu name." />
+```
+
+The fallback `textContent` value (the literal word "Search" inside the button) is what shows before the script runs — pick it from the `defaultLocale`.
+
+**Skip the switcher** when `i18n.locales.length <= 1` or `i18n.json` is missing. Render labels in `workingLanguage` from config without the data-i18n attributes.
+
+**Locale name display** — show locale dropdown options in their native script (한국어 not "Korean", 日本語 not "Japanese") because that's what the real admin does. Use this map:
+
+| locale | native label |
+|---|---|
+| ko / ko-KR | 한국어 |
+| ja / ja-JP | 日本語 |
+| zh / zh-CN | 中文 |
+| en / en-US / en-GB | English |
+| vi | Tiếng Việt |
+| th | ไทย |
+| id | Bahasa Indonesia |
+| es | Español |
+| fr | Français |
+| de | Deutsch |
+
+For unmapped locales, use `Intl.DisplayNames` or fall back to UPPER(locale).
+
+### Theme variant switcher (multi-tenant brand demo)
+
+When `manifest.stack.themeVariants.length > 1`, the source product supports multiple visual themes (e.g. `[{title: "Sky", value: "sky"}, {title: "Sky Black", value: "sky-black"}, {title: "Basic", value: "basic"}]`). Render a runtime switcher in the prototype so reviewers can demo brand multi-tenancy in a single prototype:
+
+```html
+<div class="theme-switcher" data-position="topbar">
+  <label>Theme</label>
+  <select id="theme-variant-select">
+    <option value="sky">Sky</option>
+    <option value="sky-black">Sky Black</option>
+    <option value="basic">Basic</option>
+  </select>
+</div>
+
+<script>
+  // Apply on load + persist via localStorage
+  const themeKey = 'proto:theme-variant';
+  const saved = localStorage.getItem(themeKey) || '<activeThemeVariant>';
+  document.documentElement.setAttribute('data-theme', saved);
+  document.getElementById('theme-variant-select').value = saved;
+  document.getElementById('theme-variant-select').addEventListener('change', e => {
+    document.documentElement.setAttribute('data-theme', e.target.value);
+    localStorage.setItem(themeKey, e.target.value);
+  });
+</script>
+```
+
+The variant CSS blocks (`html[data-theme="sky-black"] { --color-bg: #0a0e14; ... }`) ship in the imported `theme.css` — switching `data-theme` attribute on `<html>` triggers the cascade automatically.
+
+**Position:** put the switcher in the topbar action cluster (between language switcher and user pill) when admin shell is active. For non-admin layouts, top-right corner of the page.
+
+**Skip the switcher** when `themeVariants.length <= 1` — single-theme products don't need it.
+
+When the source's `theme.css` doesn't yet contain variant blocks but `manifest.stack.themeVariants` lists multiple variants, the BA agent can synthesize approximate variants by tweaking key tokens (e.g. `sky-black` overrides `--color-bg` and `--color-fg` to dark equivalents). Note this in the final report so the user knows variants are simulated, not authentic.
+
 ## Step 5b — Admin shell (when target is an admin/dashboard system)
 
 Read `{themeDir}/source-manifest.json` if `themeBranch === "real-system"`. When `stack.uiLib` is one of `kendo`, `material`, `antd`, `chakra` — OR when the original framework is Angular/Vue with no UI library AND the imported tokens include `--color-sidebar-bg` — wrap every screen in a full admin layout instead of the centered single-column layout.
@@ -709,7 +903,7 @@ A faithful admin shell has SEVEN regions, top to bottom:
 
 2. **Tab bar (~36px)** — admin systems with a multi-tab workspace render the open feature as a tab card just under the topbar (e.g. "★ Hotel Bookings ✕"). The tab uses the page background (slightly off-white) with rounded top corners. When the source uses tabs, render this; do NOT put the page title in the topbar — the tab IS the title.
 
-3. **Filter area** — flat, NO card border, sits directly on white with a bottom border. Layout is a labeled grid (typically `90px 240px 90px 240px 90px 240px` for label/input pairs). Search and Reset buttons absolute-positioned top-right of the area. A tiny "expand" chevron at the bottom-center signals collapsible filters.
+3. **Filter area** — flat, NO card border, sits directly on white with a bottom border. Layout is a labeled grid; pull the column template from `route-patterns.json` `filterGrids[<route>].template` (typical default `90px 240px 90px 240px 90px 240px` when not detected). Search and Reset buttons absolute-positioned top-right of the area. A tiny "expand" chevron at the bottom-center signals collapsible filters.
 
 4. **Grid toolbar** — a left summary count (e.g. plain bold "539") + right action cluster (Booking List / Data Download / "20 ▼" page-size). NOT centered, NOT in a card.
 
@@ -732,7 +926,7 @@ Read `manifest.stack.routes` from the source manifest. When non-empty, that's a 
 | `av-reservation-list-ota` | Reservation List (OTA) |
 | `sm-seller` | Seller |
 
-Group menu items by their prefix (`ho-` → Hotels, `bs-` → System / Common, `av-` → Reservations, `sm-` → Sellers, `ad-` → Dashboard, `ac-` → Payments). Pick the most-relevant 8–12 for the visible Favorites list, then nest the rest under collapsible groups (Bookings → Common / Flights / Hotels / Cars).
+Group menu items by their prefix. **Read `route-patterns.json`** `routePrefixGroups` for the auto-derived map (e.g. `{"ho": {"label": "Hotels", "routeCount": 12}, "bs": {"label": "Settings", "routeCount": 8}}`). Use these labels for collapsible group headers. When `route-patterns.json` is absent or has fewer than 2 prefixes, ask the user how to group the routes or fall back to a single flat menu list. Pick the most-relevant 8–12 for the visible Favorites list, then nest the rest under collapsible groups.
 
 When `manifest.stack.routes` is empty/missing, ask the user for the menu structure or fall back to a generic 5-item list.
 

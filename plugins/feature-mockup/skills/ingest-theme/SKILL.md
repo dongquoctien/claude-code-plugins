@@ -58,6 +58,8 @@ Additionally, when the export contains the following, copy them verbatim into th
   - {EXPORT_DIR}/validators.json → {output}/validators.json (per-field validation rules — prototype embeds in inline JS for form submit validation).
   - {EXPORT_DIR}/events.json → {output}/events.json (event handlers + action tags per route — prototype auto-wires onclick handlers with correct UX flow: validate→mutate→toast→close).
   - {EXPORT_DIR}/business-rules.json → {output}/business-rules.json (conditional alerts + error messages + constants extracted from source — prototype shows real domain logic, not invented).
+  - {EXPORT_DIR}/route-patterns.json → {output}/route-patterns.json (per-route filter-grid templates + cell two-line patterns + auto-derived prefix→group map — prototype-builder uses these to match the real admin's filter density and sidebar grouping instead of hardcoded defaults).
+  - {EXPORT_DIR}/i18n.json → {output}/i18n.json (label dictionaries per locale extracted from source assets/i18n — prototype renders a language switcher and swaps labels at runtime, demoing the real multilingual UX instead of a single hardcoded language).
   - {EXPORT_DIR}/mock-data.json → {output}/mock-data.json (entity records auto-extracted from source services — prototype uses as SEED_DATA for CRUD).
   - {EXPORT_DIR}/source-copy/ → {output}/source-copy/ (verbatim Angular templates / Vue SFCs / React components — agent reads from here, not the dev's machine).
   - {EXPORT_DIR}/component-styles.raw.scss → run AI cleanup pass to produce {output}/component-styles.compiled.css (see theme-extractor.md Phase 2).

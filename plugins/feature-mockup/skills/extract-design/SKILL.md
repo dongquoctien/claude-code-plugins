@@ -184,6 +184,22 @@ Now do the actual work, in this order:
 
    Reference benchmark on a real admin codebase (`oh-admin`): 525 rules + 331 errors + 9 constants. ho-hotel-contents alone surfaced 4 conditional alerts with real source messages ("Period accept max 3 months", "There are no items selected", etc.) — exactly the implicit business rules the prototype must demonstrate.
 
+2e4. **i18n labels** (multilingual products only). Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-i18n.mjs --in {projectRoot} --out {tmpDir}/i18n.json
+   ```
+   Walks `src/assets/i18n/`, `public/locales/`, `src/locales/` (ngx-translate / vue-i18n / react-i18next conventions). Captures every locale JSON and flattens nested keys. Output groups by locale with a label count per locale.
+
+   When the source product is multilingual (Korean+English, Vietnamese+English admin systems are common), the prototype renders a language switcher in the topbar that swaps labels at runtime. Without i18n.json, the agent only renders one language and the demo can't show the locale UX. When the source is single-language, the script emits an empty file and prototype-builder skips the switcher.
+
+2e3. **Per-route UI patterns** (filter grid columns + cell two-line patterns + prefix groups). Run:
+   ```bash
+   node {pluginRoot}/scripts/extract-route-patterns.mjs --in {projectRoot} --out {tmpDir}/route-patterns.json
+   ```
+   Walks `*-search.component.html` / `filter.component.html` / `*-grid.component.html` per route to detect the ACTUAL filter-area grid template (label-control pair count + widths) and the cell two-line pattern (which fields render with a `.row-line2` secondary line). Plus auto-derives the route-prefix → group-name map from the routes list so prototype-builder doesn't hardcode `ho-→Hotels` / `bs-→System` mappings.
+
+   Without this file, prototype-builder hardcodes `90px 240px 90px 240px 90px 240px` for filter grids and guesses prefix groups — the prototype's filter density may not match the real admin. Reference benchmark on a real admin codebase (`oh-admin`): 130 routes scanned, ~80 with filter-grid signature, ~60 with two-line cell patterns, 11 prefix groups auto-derived.
+
 2e. **Mock data — seed records per entity.** Run:
    ```bash
    node {pluginRoot}/scripts/extract-mock-data.mjs --in {projectRoot} --out {tmpDir}/mock-data.json
@@ -250,6 +266,8 @@ Now do the actual work, in this order:
        "validators": "validators.json",
        "events": "events.json",
        "businessRules": "business-rules.json",
+       "routePatterns": "route-patterns.json",
+       "i18n": "i18n.json",
        "mockData": "mock-data.json",
        "sourceCopy": "source-copy/",
        "sourceCopyManifest": "source-copy/_source-copy-manifest.json",

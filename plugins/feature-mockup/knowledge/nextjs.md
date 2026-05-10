@@ -87,3 +87,41 @@ Read `app/layout.tsx` AND any nested layouts when generating an admin-shell prot
 4. Read 2-4 layouts matching the feature's domain (e.g. `app/(app)/layout.tsx` for admin features).
 5. Read `components/ui/*` for shadcn components.
 6. Read 3-5 `page.tsx` files near the feature for composition patterns.
+
+## Copy-from-source discipline (Next.js-specific)
+
+When you read a `page.tsx` from `source-copy/`, treat its rendered JSX tree as ground truth — same rules as react.md. Plus:
+
+- **Server-fetched data** (`async function Page() { const data = await fetch(...) }`) — read the function to learn the data SHAPE; the prototype hardcodes a sample matching that shape.
+- **Streaming with `<Suspense>`**: render the resolved fallback content statically.
+- **Parallel routes (`@modal/page.tsx`, `@sidebar/page.tsx`)**: render each slot's content into its respective container in the prototype.
+- **Intercepting routes (`(.)photo/[id]`)**: render the intercepted version (modal-style) instead of the full page when applicable.
+
+## Admin patterns (App Router + shadcn)
+
+Modern Next.js admins built with shadcn:
+
+- **Layout shell**: `app/(app)/layout.tsx` typically renders `<Sidebar />` + `<Header />` + `{children}`. Inline this shell into every prototype page (or write once to a JS string and inject).
+- **`<DataTable>` from `@tanstack/react-table` + shadcn**: same as react.md — read column definitions, render columns.
+- **Server Actions for forms**: `<form action={createBooking}>` where `createBooking` is `'use server'`. Replace with `<form onsubmit="...">` + JS that simulates the action's behavior (toast + state mutation).
+- **`<Toaster />` from sonner / shadcn-toast**: rendered once in root layout; toasts triggered via `toast.success("Saved")`. Prototype uses its own toast helper, but match the visual position (top-right by default).
+- **`<Dialog>`, `<Sheet>`, `<Drawer>`**: same as react.md.
+- **`<Command>` (cmdk wrapper)**: command-palette UI. Render as a dialog with search input + scrollable list.
+
+Pages Router admins (legacy):
+
+- `pages/_app.tsx` is the equivalent of root layout — wrap every prototype page with its outer JSX.
+- `pages/api/**` — SKIP, server-only.
+- `getServerSideProps` / `getStaticProps`: read for data shape only; hardcode results.
+
+## Form validation patterns
+
+- **react-hook-form + zod**: same as react.md. Most modern Next.js admins use this.
+- **Server Action validation**: when the action calls `parse(schema, formData)` server-side, the prototype emits the same validation client-side (since there's no server).
+- **Native HTML5 attributes**: `<input required pattern="...">` — keep verbatim.
+
+## Internationalization (i18n)
+
+- **`next-intl`**: messages in `messages/{locale}.json`. Same shape as `extract-i18n.mjs` expects — the script catches these.
+- **`next-i18next`** (Pages Router legacy): `public/locales/{locale}/translation.json`. Also caught.
+- **App Router routing**: `app/[locale]/page.tsx` with middleware. Render one prototype per locale OR use the runtime language switcher (preferred — fewer files).

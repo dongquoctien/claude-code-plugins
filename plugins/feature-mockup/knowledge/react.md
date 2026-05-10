@@ -77,3 +77,38 @@ When generating a prototype:
 3. Read `components` bucket filtered to `components/ui/` (shadcn) or root `components/` (custom). These define your design vocabulary: Button, Card, Input, Dialog.
 4. Read `templates` is empty for React — JSX components ARE the templates. Read 3-5 component files matching the feature's domain.
 5. SKIP `node_modules` references — the prototype won't have those.
+
+## Copy-from-source discipline (React-specific)
+
+When you read a React component file from `source-copy/`, treat its rendered JSX tree as ground truth:
+
+- **Map children**: `{items.map(item => <Row .../>)}` — count what the source renders. If a typical sample data has 17 fields, render 17 columns in the prototype, not "the important ones".
+- **Conditional rendering**: `{cond && <Foo />}` and `{cond ? <A /> : <B />}` — render BOTH branches with comments, OR pick the most common branch (for the demo's happy path) and note the alternative in the report.
+- **Props with defaults**: `<Button variant={variant ?? "default"}>` — use the default in the prototype unless the brief specifies otherwise.
+- **Spread props `{...rest}`**: when a component spreads, look up its definition and inline the props it actually consumes.
+- **Custom hooks (`useFooData`)**: don't try to execute. Read the hook body to see what shape it returns, then hardcode mock-data of that shape in the prototype.
+
+## Admin patterns (when uiLib is shadcn / mui / antd / chakra)
+
+Modern React admins built with shadcn:
+- `<DataTable>` from `@tanstack/react-table` + shadcn wrappers. Cells often have nested formatters; copy the formatter logic into prototype HTML manually.
+- `<Form>` from `react-hook-form` + zod schemas. Read the schema for validation rules; the prototype's inline JS replicates them.
+- `<Dialog>` from `@radix-ui/react-dialog` or shadcn's wrapped version. Anatomy: `Dialog → DialogTrigger → DialogContent → DialogHeader → DialogTitle → DialogFooter`. Mirror that structure in static HTML with `<dialog>` element + helper functions.
+- `<Sheet>`, `<Drawer>`, `<Popover>` — radix primitives. Prototype these as fixed-position panels with backdrop overlays.
+
+MUI admins:
+- `<DataGrid>` from `@mui/x-data-grid` — column definitions are arrays of objects with `field`, `headerName`, `valueFormatter`. Read these; render as `<table>` columns.
+- `<Paper>` is the card primitive — `box-shadow`, white bg, 4px radius.
+- `<Typography variant="h6">` — match font-size from theme.typography.
+
+Ant Design admins:
+- `<Table>` `columns` prop is the source of truth. `dataIndex` = field name; `render` function = cell formatter.
+- `<Form.Item>` — label position, validation rules.
+- `<Drawer>`, `<Modal>` — render as fixed-position overlays.
+
+## Form validation patterns
+
+- **react-hook-form + zod**: `const schema = z.object({ email: z.string().email() })`. Read the schema; emit equivalent HTML5 validation + JS rules in prototype.
+- **Formik + Yup**: `Yup.object({ email: Yup.string().email().required() })`. Same approach.
+- **react-final-form**: similar; less common.
+- **Native HTML5**: `<input required pattern="...">` — keep verbatim.

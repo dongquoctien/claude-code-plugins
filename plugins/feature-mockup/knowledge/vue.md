@@ -93,3 +93,42 @@ When the source uses a heavy UI library, prefer the team's own custom CSS in `gl
 3. Read `templates` (Vue components ARE templates) for the feature's domain.
 4. Read 2-3 layout files if Nuxt — `layouts/default.vue`, `layouts/admin.vue`.
 5. Read `components/Base*.vue` or `components/ui/*` for the design vocabulary.
+
+## Copy-from-source discipline (Vue-specific)
+
+When you read a Vue SFC from `source-copy/`, treat the `<template>` block as ground truth:
+
+- **`v-for` materialization**: count items from the source's typical data shape, render that many in static HTML. Don't curate down.
+- **`v-if` / `v-else`**: in source, only one branch shows at a time. In prototype, render the happy path branch and note the alternative.
+- **`<Component :is="...">` dynamic components**: resolve to the most common variant.
+- **Slots**: when a parent uses `<Modal><template #header>`, inline the slot content into the modal's header div in the prototype.
+
+## Admin patterns (when uiLib is element-plus / vuetify / primevue)
+
+Element Plus admins (KR/CN enterprise):
+- `<el-table>` — `:data` is the rows, `<el-table-column prop="field">` are columns. Each `<el-table-column>` may have `label`, `width`, `formatter` slot, `template #default="scope"`. Mirror in static HTML.
+- `<el-form>` with `:rules` — extract validation rules into prototype's inline JS.
+- `<el-dialog>` — overlay pattern. Use `<dialog>` element or fixed-position overlay.
+- `<el-pagination>` — render as the standard pagination component (`« ‹ 1 2 3 › »`).
+
+Vuetify admins:
+- `<v-data-table>` `headers` prop = column definitions; `items` = rows.
+- `<v-card>` is the standard card; thin shadow + 4px radius.
+- `<v-btn variant="elevated">` / `"flat"` / `"outlined"` — render with shadcn-equivalent classes.
+
+PrimeVue admins:
+- `<DataTable>` columns via `<Column field="...">`. Similar to Element Plus.
+- `<Dialog>` overlay component with `:visible.sync` (Vue 2) or `v-model:visible` (Vue 3).
+
+## Form validation patterns
+
+- **VeeValidate v4 + zod/yup**: `const { errors, handleSubmit } = useForm({ validationSchema })`. Read schema, replicate.
+- **Element Plus `<el-form :rules>`**: rules object maps field names to validators array.
+- **Vuelidate**: `v$ = useVuelidate(rules, state)`. Read the rules object.
+- **Native HTML5 attributes** on inputs work the same as React — keep verbatim.
+
+## State management
+
+- **Pinia** stores in `stores/`: `defineStore('id', { state, getters, actions })`. Read the state shape for mock-data hints; ignore actions (the prototype doesn't fetch).
+- **Vuex** (Vue 2 legacy): same idea — read `state` and `getters` for shape only.
+- **Composables in `composables/`**: pure logic + reactive state, no UI. Skip.
