@@ -1,6 +1,6 @@
 ---
-name: verify
-description: "Use this to compare a generated prototype against the real admin site or original screenshots. Identifies visual/content/interaction gaps. Asks user questions throughout to confirm scope and choices. Invoke for prompts like 'verify the mockup', 'compare prototype with real admin', '/feature-mockup:verify <feature>'."
+name: fm-verify
+description: "Use this to compare a generated prototype against the real admin site or original screenshots. Identifies visual/content/interaction gaps. Asks user questions throughout to confirm scope and choices. Invoke for prompts like 'verify the mockup', 'compare prototype with real admin', '/feature-mockup:fm-verify <feature>'."
 argument-hint: "<feature-name>"
 user-invocable: true
 allowed-tools: Read, Write, Glob, Grep, Bash, Task
@@ -15,12 +15,12 @@ Compare a generated prototype side-by-side with a reference (live admin URL OR u
 ## Step 1 — Load config + resolve feature dir + show resume status
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
-> "Run `/feature-mockup:init` first."
+> "Run `/feature-mockup:fm-init` first."
 
 Extract `outputDir` and `workingLanguage`.
 
 `$ARGUMENTS` = feature name. Resolve `featureDir = {outputDir}/{feature}`. If missing, stop:
-> "No mockup found at `{featureDir}`. Run `/feature-mockup:make {feature}` first."
+> "No mockup found at `{featureDir}`. Run `/feature-mockup:fm-make {feature}` first."
 
 ### Resume status — show when timeline has prior runs
 
@@ -51,7 +51,7 @@ Use `AskUserQuestion`:
 Options:
 1. **Live admin URL** — capture screenshots in real-time via headless browser
 2. **User-provided screenshots** — user pastes/uploads images of the real admin
-3. **Original brief screenshots** — re-use the screenshots passed to `/feature-mockup:make` (in `{featureDir}/brief.json` `inputs[].path`)
+3. **Original brief screenshots** — re-use the screenshots passed to `/feature-mockup:fm-make` (in `{featureDir}/brief.json` `inputs[].path`)
 4. **Both live + screenshots** — combined check
 
 ## Step 3 — Pick browser-automation backend (when live URL chosen)
@@ -78,27 +78,27 @@ If user picks a backend that isn't installed, ask:
 For Chrome DevTools MCP install (Unix shell):
 ```bash
 claude mcp add chrome-devtools -- npx -y @anthropic-ai/mcp-server-chrome-devtools
-# Then restart Claude Code and re-run /feature-mockup:verify
+# Then restart Claude Code and re-run /feature-mockup:fm-verify
 ```
 
 For Chrome DevTools MCP install (PowerShell on Windows):
 ```powershell
 claude mcp add chrome-devtools -- npx -y "@anthropic-ai/mcp-server-chrome-devtools"
-# Then restart Claude Code and re-run /feature-mockup:verify
+# Then restart Claude Code and re-run /feature-mockup:fm-verify
 ```
 
 For Playwright MCP install (Unix shell):
 ```bash
 claude mcp add playwright -- npx -y "@playwright/mcp@latest"
 npx playwright install chromium
-# Then restart Claude Code and re-run /feature-mockup:verify
+# Then restart Claude Code and re-run /feature-mockup:fm-verify
 ```
 
 For Playwright MCP install (PowerShell):
 ```powershell
 claude mcp add playwright -- npx -y "@playwright/mcp@latest"
 npx playwright install chromium
-# Then restart Claude Code and re-run /feature-mockup:verify
+# Then restart Claude Code and re-run /feature-mockup:fm-verify
 ```
 
 If user picks "neither installed", default to **user-provided screenshots** flow (Step 2 option 2).
@@ -250,7 +250,7 @@ Check whether a dev server is already running for this prototype:
 1. Look for prior `/preview` background bash by checking `BashOutput`/`TaskList` for matching `featureDir`
 2. If running, get URL from its captured stdout
 3. If not running, ask:
-   > "Need to start the dev server first. Should I run `/feature-mockup:preview {feature}` for you, or have you already started it on another terminal? If yes, what URL?"
+   > "Need to start the dev server first. Should I run `/feature-mockup:fm-preview {feature}` for you, or have you already started it on another terminal? If yes, what URL?"
 
 When user has it running, navigate the MCP to that URL. When they don't, defer to `/preview` and ask them to re-run `/verify` afterwards (avoids double-spawning servers).
 
@@ -342,7 +342,7 @@ Goal:
      - P2: minor (e.g. icon variant, font weight subtle)
 
   5. Recommended fixes
-     - For each P0/P1, write a one-line fix prompt the user can pass to /feature-mockup:fix
+     - For each P0/P1, write a one-line fix prompt the user can pass to /feature-mockup:fm-fix
 
 Output format: Markdown with screenshots inline (relative paths), Y/N checklist tables, prioritized gap list.
 
@@ -369,13 +369,13 @@ Summary:
   P2 issues:  {count}
 
 What next?
-  1. Apply fixes:    /feature-mockup:fix {feature}
-  2. Re-verify:      /feature-mockup:verify {feature}
+  1. Apply fixes:    /feature-mockup:fm-fix {feature}
+  2. Re-verify:      /feature-mockup:fm-verify {feature}
   3. Open report:    open `{report path}`
 ```
 
 Use `AskUserQuestion`:
-> "Apply recommended fixes now via `/feature-mockup:fix`?"
+> "Apply recommended fixes now via `/feature-mockup:fm-fix`?"
 
 If yes, surface the fix prompts that should be passed.
 
@@ -429,5 +429,5 @@ Do NOT delete `.verify/` — user may want to inspect screenshots later. The fol
 
 Don't end the session until the user has either:
 1. Confirmed they read the report
-2. Triggered `/feature-mockup:fix`
+2. Triggered `/feature-mockup:fm-fix`
 3. Said "skip fixes for now"

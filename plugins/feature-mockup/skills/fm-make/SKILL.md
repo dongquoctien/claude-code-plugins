@@ -1,6 +1,6 @@
 ---
-name: make
-description: "Use when the user wants to generate a runnable mockup/prototype for a feature, given a description and optional screenshots/documents. Invoke for prompts like 'make a prototype for X', 'tạo prototype cho Y', '/feature-mockup:make ...'. Reads .claude/feature-mockup.json, parses inputs (text + images + docs), then orchestrates the input-analyzer and prototype-builder agents."
+name: fm-make
+description: "Use when the user wants to generate a runnable mockup/prototype for a feature, given a description and optional screenshots/documents. Invoke for prompts like 'make a prototype for X', 'tạo prototype cho Y', '/feature-mockup:fm-make ...'. Reads .claude/feature-mockup.json, parses inputs (text + images + docs), then orchestrates the input-analyzer and prototype-builder agents."
 argument-hint: "<feature-kebab-name> [path-to-image-or-doc ...]"
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Bash, Task
@@ -14,7 +14,7 @@ Generate a runnable prototype for: **$ARGUMENTS**
 
 1. Read `.claude/feature-mockup.json`.
 2. If missing, stop with:
-   > "Feature Mockup is not configured for this project. Run `/feature-mockup:init` first."
+   > "Feature Mockup is not configured for this project. Run `/feature-mockup:fm-init` first."
 3. Extract `workingLanguage`, `outputDir`, `defaultTemplate`, `autoPreview`, `theme.imported`, `theme.path`.
 
 **All user-facing output below this point must be in `workingLanguage`** (en / ko / vi). Map: `en`=English, `ko`=Korean, `vi`=Vietnamese.
@@ -113,7 +113,7 @@ Open questions from analyzer:
   - <list>
 ```
 
-If `autoPreview === true` AND template is `html-tailwind`, suggest the user run `/feature-mockup:preview {feature}`.
+If `autoPreview === true` AND template is `html-tailwind`, suggest the user run `/feature-mockup:fm-preview {feature}`.
 
 ## Step N+1 — Log to timeline
 

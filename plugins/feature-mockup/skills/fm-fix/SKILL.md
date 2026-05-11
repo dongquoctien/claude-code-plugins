@@ -1,6 +1,6 @@
 ---
-name: fix
-description: "Use this to apply UI/UX + interaction fixes to a generated prototype, either from /feature-mockup:verify findings or from user-described issues. Always asks the user to confirm scope and choices before editing. Invoke for prompts like 'fix the prototype', 'apply verify fixes', '/feature-mockup:fix <feature>'."
+name: fm-fix
+description: "Use this to apply UI/UX + interaction fixes to a generated prototype, either from /feature-mockup:fm-verify findings or from user-described issues. Always asks the user to confirm scope and choices before editing. Invoke for prompts like 'fix the prototype', 'apply verify fixes', '/feature-mockup:fm-fix <feature>'."
 argument-hint: "<feature-name> [optional: free-form fix description]"
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
@@ -17,7 +17,7 @@ Apply targeted fixes to a generated prototype. Two input sources:
 ## Step 1 — Load config + resolve feature dir
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
-> "Run `/feature-mockup:init` first."
+> "Run `/feature-mockup:fm-init` first."
 
 Extract `outputDir`, `workingLanguage`, and `theme.imported` (true/false).
 
@@ -47,7 +47,7 @@ Options (only show ones that apply):
 3. **Apply specific issues I'll describe** — opens a follow-up prompt
 4. **Both verify report + my own issues**
 
-If no verify report exists, suggest running `/feature-mockup:verify {feature}` first OR collect the user's free-form description.
+If no verify report exists, suggest running `/feature-mockup:fm-verify {feature}` first OR collect the user's free-form description.
 
 ## Step 3 — Build the fix list
 
@@ -307,12 +307,12 @@ Auto-repair is OK for trivial fixes (e.g. `class` → `className`); for ambiguou
 
 After applying fixes, prompt the user:
 
-> "Fixes applied. Run `/feature-mockup:verify {feature}` to confirm the issues are resolved?"
+> "Fixes applied. Run `/feature-mockup:fm-verify {feature}` to confirm the issues are resolved?"
 
 Use `AskUserQuestion`:
 1. **Yes, run verify now**
 2. **No, I'll review manually first**
-3. **Open the prototype** (run `/feature-mockup:preview {feature}` first)
+3. **Open the prototype** (run `/feature-mockup:fm-preview {feature}` first)
 
 ## Step 8b — Sync to timeline
 
@@ -335,7 +335,7 @@ node {pluginRoot}/scripts/timeline.mjs append \
 
 The first call uses the placeholder `evt-pending`; the second call appends the event and prints its ID. If you want the resolved gaps' `resolvedBy` to reference the exact event, run resolve-gaps AGAIN with the real event ID after append. Or, simpler: run append first, parse the eventId from its output, then resolve-gaps with that ID.
 
-After timeline writes, the next time the user runs `/feature-mockup:preview` or `/feature-mockup:status`, the resume hint will reflect the new pending count (which may now be zero — phase becomes `fixed`).
+After timeline writes, the next time the user runs `/feature-mockup:fm-preview` or `/feature-mockup:fm-status`, the resume hint will reflect the new pending count (which may now be zero — phase becomes `fixed`).
 
 ## Step 9 — Final report
 
@@ -371,8 +371,8 @@ Print the report path so user can audit.
 - **Fix introduces a new gap** (e.g. adding column makes table overflow): note in fix log; suggest re-verify.
 - **User asks to fix something the brief originally said NOT to do**: ask explicitly: "The brief says 'no Booking ID column'. You want to add it anyway?"
 - **Theme not imported**: skip theme-token rules; use literal values.
-- **Fix requires source data we don't have**: ask user: "I need the actual {field} options to add this dropdown. Provide a list, or extract from real admin via /feature-mockup:verify first?"
-- **Mass rewrite request** ("redo the entire grid"): refuse, ask user to break into specific issues OR run /feature-mockup:make again with updated brief.
+- **Fix requires source data we don't have**: ask user: "I need the actual {field} options to add this dropdown. Provide a list, or extract from real admin via /feature-mockup:fm-verify first?"
+- **Mass rewrite request** ("redo the entire grid"): refuse, ask user to break into specific issues OR run /feature-mockup:fm-make again with updated brief.
 
 ## Done
 

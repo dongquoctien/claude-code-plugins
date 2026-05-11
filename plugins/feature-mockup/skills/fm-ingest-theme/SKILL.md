@@ -1,6 +1,6 @@
 ---
-name: ingest-theme
-description: "Use this when the user wants to import their team's real front-end design (tokens + components) into feature-mockup, so generated prototypes look like the real product. Invoke for prompts like 'import our design', 'ingest theme', '/feature-mockup:ingest-theme <path>'. Accepts a zip file or directory."
+name: fm-ingest-theme
+description: "Use this when the user wants to import their team's real front-end design (tokens + components) into feature-mockup, so generated prototypes look like the real product. Invoke for prompts like 'import our design', 'ingest theme', '/feature-mockup:fm-ingest-theme <path>'. Accepts a zip file or directory."
 argument-hint: "<path-to-fe-export-zip-or-dir>"
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Bash, Task
@@ -13,7 +13,7 @@ Import the team's real front-end design system. The end state: `.claude/feature-
 ## Step 1 — Load config
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
-> "Run `/feature-mockup:init` first."
+> "Run `/feature-mockup:fm-init` first."
 
 Extract `workingLanguage` for user-facing output. All messages below use that language.
 
@@ -117,7 +117,7 @@ Components:       <names> (cloned)
 Quarantined:      <names> (reason)  -- empty when all good
 Theme path:       .claude/feature-mockup/theme
 
-From now on /feature-mockup:make will use the real-system theme automatically.
+From now on /feature-mockup:fm-make will use the real-system theme automatically.
 To re-import after a design system update, just run this skill again.
 ```
 

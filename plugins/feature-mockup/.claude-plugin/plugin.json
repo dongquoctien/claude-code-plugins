@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "feature-mockup",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "BA-friendly prototype generator. Turn a feature description plus screenshots/docs into a runnable HTML or React mockup, optionally themed with the team's real front-end design.",
   "author": {
     "name": "Dong Quoc Tien",

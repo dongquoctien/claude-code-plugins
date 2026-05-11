@@ -172,28 +172,28 @@ function regenerateStatus(t) {
     lines.push(`You have ${cnt} P0/P1 ${cnt === 1 ? 'issue' : 'issues'} to fix. Run:`);
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:fix ${feature}`);
+    lines.push(`/feature-mockup:fm-fix ${feature}`);
     lines.push('```');
   } else if (t.events.some(e => e.kind === 'fix') && !t.events.some(e => e.kind === 'deploy')) {
     lines.push('All fixes applied. Ready to share with stakeholders:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:deploy ${feature}`);
+    lines.push(`/feature-mockup:fm-deploy ${feature}`);
     lines.push('```');
   } else if (t.events.some(e => e.kind === 'make') && !t.events.some(e => e.kind === 'verify')) {
     lines.push('Prototype generated but not verified yet. Compare it against the real admin or screenshots:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:verify ${feature}`);
+    lines.push(`/feature-mockup:fm-verify ${feature}`);
     lines.push('```');
   } else if (!t.events.some(e => e.kind === 'make')) {
     lines.push('Generate the prototype:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:make ${feature} <inputs...>`);
+    lines.push(`/feature-mockup:fm-make ${feature} <inputs...>`);
     lines.push('```');
   } else {
-    lines.push(`Open the prototype: \`/feature-mockup:preview ${feature}\``);
+    lines.push(`Open the prototype: \`/feature-mockup:fm-preview ${feature}\``);
   }
   lines.push('');
 
