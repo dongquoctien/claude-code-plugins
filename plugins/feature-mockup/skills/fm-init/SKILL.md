@@ -1,6 +1,6 @@
 ---
-name: init
-description: "Use this when the user wants to set up Feature Mockup in a project for the first time, or run /feature-mockup:init explicitly. Initializes .claude/feature-mockup.json with output dir, default template, and working language."
+name: fm-init
+description: "Use this when the user wants to set up Feature Mockup in a project for the first time, or run /feature-mockup:fm-init explicitly. Initializes .claude/feature-mockup.json with output dir, default template, and working language."
 argument-hint: ""
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Bash
@@ -30,7 +30,7 @@ Then ask each of the following, **in the chosen language**:
    - `html-tailwind` — zero install, opens via `file://`. Best for stakeholder demos.
    - `react-vite` — full React + Vite project. Best when devs will fork the prototype.
    Ask: *"Which template should be the default? (html-tailwind / react-vite)"*
-3. **Auto-open preview** after `/feature-mockup:make` finishes? (`true` / `false`). Default: `true`.
+3. **Auto-open preview** after `/feature-mockup:fm-make` finishes? (`true` / `false`). Default: `true`.
 
 ## Step 3 — Write the config
 
@@ -66,8 +66,8 @@ Template:  <defaultTemplate>
 Language:  <workingLanguage>
 
 Next steps:
-  • Make a mockup:        /feature-mockup:make "<feature-name>" [image.png ...] [doc.md ...]
-  • Import real theme:    /feature-mockup:ingest-theme <path-to-fe-export>
+  • Make a mockup:        /feature-mockup:fm-make "<feature-name>" [image.png ...] [doc.md ...]
+  • Import real theme:    /feature-mockup:fm-ingest-theme <path-to-fe-export>
 ```
 
 Make sure the config is created and the path is shown. Done.

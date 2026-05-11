@@ -1,6 +1,6 @@
 ---
-name: preview
-description: "Use this when the user wants to open a generated prototype in a browser. Auto-detects template (static HTML or vite) and starts the right server. Invoke for prompts like 'preview the mockup', 'open prototype', '/feature-mockup:preview <feature>'."
+name: fm-preview
+description: "Use this when the user wants to open a generated prototype in a browser. Auto-detects template (static HTML or vite) and starts the right server. Invoke for prompts like 'preview the mockup', 'open prototype', '/feature-mockup:fm-preview <feature>'."
 argument-hint: "<feature-name>"
 user-invocable: true
 allowed-tools: Read, Bash, Glob
@@ -13,7 +13,7 @@ Open a generated prototype in the user's default browser. Detect template (stati
 ## Step 1 — Load config + resolve feature dir + auto-show resume hint
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
-> "Run `/feature-mockup:init` first."
+> "Run `/feature-mockup:fm-init` first."
 
 Extract `outputDir` and `workingLanguage`.
 
@@ -24,7 +24,7 @@ featureDir = {projectRoot}/{outputDir}/{$ARGUMENTS}
 ```
 
 If `featureDir` does not exist, stop with:
-> "No mockup found at `{featureDir}`. Run `/feature-mockup:make {feature}` first, or check the spelling."
+> "No mockup found at `{featureDir}`. Run `/feature-mockup:fm-make {feature}` first, or check the spelling."
 
 ### Resume hint — auto-show when timeline exists
 

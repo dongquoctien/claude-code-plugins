@@ -2,7 +2,7 @@
 
 This is the contract between **front-end devs** and **BAs using `feature-mockup`**.
 
-When a BA runs `/feature-mockup:ingest-theme <path>`, the plugin reads a snapshot of your real design system and uses it to theme prototypes. The closer the snapshot matches production, the more faithful the prototype looks.
+When a BA runs `/feature-mockup:fm-ingest-theme <path>`, the plugin reads a snapshot of your real design system and uses it to theme prototypes. The closer the snapshot matches production, the more faithful the prototype looks.
 
 ## What to export
 
@@ -122,10 +122,10 @@ If a component breaks any of these, leave it out. A working subset (Button + Car
 
 ```bash
 # BA imports your export — once per project, or whenever you ship updates
-/feature-mockup:ingest-theme ./from-dev/fe-theme-export.zip
+/feature-mockup:fm-ingest-theme ./from-dev/fe-theme-export.zip
 
-# From now on, every /feature-mockup:make uses the imported tokens + components
-/feature-mockup:make "booking-cancel-flow" ./screenshots/...
+# From now on, every /feature-mockup:fm-make uses the imported tokens + components
+/feature-mockup:fm-make "booking-cancel-flow" ./screenshots/...
 ```
 
 The plugin writes the normalized output to `.claude/feature-mockup/theme/`:
@@ -143,7 +143,7 @@ The plugin writes the normalized output to `.claude/feature-mockup/theme/`:
 
 ## Versioning
 
-When you bump your design system, re-export and ship the new zip. The BA re-runs `ingest-theme` and existing prototypes can be regenerated (`/feature-mockup:make` with `--rebuild`).
+When you bump your design system, re-export and ship the new zip. The BA re-runs `ingest-theme` and existing prototypes can be regenerated (`/feature-mockup:fm-make` with `--rebuild`).
 
 ## Quick template
 

@@ -98,13 +98,13 @@ Every feature folder has a session timeline so a BA can pick up where they left 
 
 | kind | When emitted | Data fields |
 |---|---|---|
-| `init` | `/feature-mockup:init` runs and creates config | `workingLanguage`, `outputDir`, `defaultTemplate` |
-| `theme-import` | `/feature-mockup:ingest-theme` succeeds | `source`, `tokensCount`, `componentsCount`, `themeDir` |
-| `make` | `/feature-mockup:make` succeeds | `template`, `screenCount`, `themeBranch`, `briefPath` |
-| `preview` | `/feature-mockup:preview` opens browser | `url`, `framework` |
-| `verify` | `/feature-mockup:verify` finishes | `reportPath`, `referenceSource`, `browserBackend`, `p0`, `p1`, `p2`, `screenshots[]` |
-| `fix` | `/feature-mockup:fix` finishes | `fixLogPath`, `applied[]`, `skipped[]`, `themeDeviations[]` |
-| `deploy` | `/feature-mockup:deploy` succeeds | `provider`, `url`, `expiresAt`, `providerMeta` |
+| `init` | `/feature-mockup:fm-init` runs and creates config | `workingLanguage`, `outputDir`, `defaultTemplate` |
+| `theme-import` | `/feature-mockup:fm-ingest-theme` succeeds | `source`, `tokensCount`, `componentsCount`, `themeDir` |
+| `make` | `/feature-mockup:fm-make` succeeds | `template`, `screenCount`, `themeBranch`, `briefPath` |
+| `preview` | `/feature-mockup:fm-preview` opens browser | `url`, `framework` |
+| `verify` | `/feature-mockup:fm-verify` finishes | `reportPath`, `referenceSource`, `browserBackend`, `p0`, `p1`, `p2`, `screenshots[]` |
+| `fix` | `/feature-mockup:fm-fix` finishes | `fixLogPath`, `applied[]`, `skipped[]`, `themeDeviations[]` |
+| `deploy` | `/feature-mockup:fm-deploy` succeeds | `provider`, `url`, `expiresAt`, `providerMeta` |
 | `note` | User-invoked `/feature-mockup:note` (future) | `text` |
 
 ## currentPhase derivation
@@ -163,7 +163,7 @@ Auto-regenerated from timeline.json on every skill write. Markdown that a human 
 You have 3 P0 issues to fix. Run:
 
 ```
-/feature-mockup:fix booking-cancel-flow
+/feature-mockup:fm-fix booking-cancel-flow
 ```
 
 Or open the verify report directly: `.verify/report.md`

@@ -184,7 +184,7 @@ function regenerateStatus(t) {
     lines.push(`You have ${cnt} P0/P1 ${cnt === 1 ? 'issue' : 'issues'} to fix. Run:`);
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:fix ${feature}`);
+    lines.push(`/feature-mockup:fm-fix ${feature}`);
     lines.push('```');
     if (pending.length > blockingPending.length) {
       const p2cnt = pending.length - blockingPending.length;
@@ -195,7 +195,7 @@ function regenerateStatus(t) {
     lines.push('All P0/P1 fixes applied. Ready to share with stakeholders:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:deploy ${feature}`);
+    lines.push(`/feature-mockup:fm-deploy ${feature}`);
     lines.push('```');
     if (pending.length > 0) {
       lines.push('');
@@ -205,7 +205,7 @@ function regenerateStatus(t) {
     lines.push('Prototype is ready but not verified yet. Compare it against the real admin or screenshots:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:verify ${feature}`);
+    lines.push(`/feature-mockup:fm-verify ${feature}`);
     lines.push('```');
     if (!hasMakeEvent && prototypeOnDisk) {
       lines.push('');
@@ -215,10 +215,10 @@ function regenerateStatus(t) {
     lines.push('Generate the prototype:');
     lines.push('');
     lines.push('```');
-    lines.push(`/feature-mockup:make ${feature} <inputs...>`);
+    lines.push(`/feature-mockup:fm-make ${feature} <inputs...>`);
     lines.push('```');
   } else {
-    lines.push(`Open the prototype: \`/feature-mockup:preview ${feature}\``);
+    lines.push(`Open the prototype: \`/feature-mockup:fm-preview ${feature}\``);
   }
   lines.push('');
 

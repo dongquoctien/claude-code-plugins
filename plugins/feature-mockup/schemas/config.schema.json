@@ -21,12 +21,12 @@
     "defaultTemplate": {
       "type": "string",
       "enum": ["html-tailwind", "react-vite"],
-      "description": "Which built-in template to use when /feature-mockup:make does not specify one."
+      "description": "Which built-in template to use when /feature-mockup:fm-make does not specify one."
     },
     "autoPreview": {
       "type": "boolean",
       "default": true,
-      "description": "Whether /feature-mockup:make should suggest /feature-mockup:preview at the end."
+      "description": "Whether /feature-mockup:fm-make should suggest /feature-mockup:fm-preview at the end."
     },
     "theme": {
       "type": "object",
@@ -38,7 +38,7 @@
     },
     "deployHistory": {
       "type": "array",
-      "description": "Append-only log of /feature-mockup:deploy invocations. Capped at 20 most recent entries.",
+      "description": "Append-only log of /feature-mockup:fm-deploy invocations. Capped at 20 most recent entries.",
       "maxItems": 20,
       "items": {
         "type": "object",

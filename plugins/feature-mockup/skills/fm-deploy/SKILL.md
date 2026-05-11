@@ -1,6 +1,6 @@
 ---
-name: deploy
-description: "Use this to publish a generated prototype to a free hosting provider so stakeholders can open it in any browser without running it locally. Asks the user to pick a provider (Netlify Drop / Surge.sh / Cloudflare Pages / GitHub Pages), auto-installs the needed CLI, runs framework build if required, then captures the live URL. Invoke for prompts like 'deploy the mockup', 'share prototype URL', '/feature-mockup:deploy <feature>'."
+name: fm-deploy
+description: "Use this to publish a generated prototype to a free hosting provider so stakeholders can open it in any browser without running it locally. Asks the user to pick a provider (Netlify Drop / Surge.sh / Cloudflare Pages / GitHub Pages), auto-installs the needed CLI, runs framework build if required, then captures the live URL. Invoke for prompts like 'deploy the mockup', 'share prototype URL', '/feature-mockup:fm-deploy <feature>'."
 argument-hint: "<feature-name>"
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion
@@ -19,18 +19,18 @@ Publish the prototype to a free static-host provider and return a shareable URL.
 ## Step 1 — Load config + resolve feature dir
 
 Read `.claude/feature-mockup.json`. If missing, stop with:
-> "Run `/feature-mockup:init` first."
+> "Run `/feature-mockup:fm-init` first."
 
 Extract `outputDir` and `workingLanguage`.
 
 `$ARGUMENTS` is the feature name. Resolve `featureDir = {outputDir}/{$ARGUMENTS}`.
 
 If `featureDir` does not exist, stop with:
-> "No mockup found at `{featureDir}`. Run `/feature-mockup:make {feature}` first."
+> "No mockup found at `{featureDir}`. Run `/feature-mockup:fm-make {feature}` first."
 
 ## Step 2 — Detect prototype framework + build output dir
 
-Same detection as `/feature-mockup:preview` Step 2. Determine `prototypeFramework` AND the directory that will actually be uploaded:
+Same detection as `/feature-mockup:fm-preview` Step 2. Determine `prototypeFramework` AND the directory that will actually be uploaded:
 
 | Framework signature | uploadDir (relative to featureDir) | Build needed? | Build command |
 |---|---|---|---|
@@ -47,7 +47,7 @@ Same detection as `/feature-mockup:preview` Step 2. Determine `prototypeFramewor
 
 If the framework requires a server runtime that can't deploy as static (Remix classic, Next with server components mode = `nodejs`, full SSR Nuxt without `nuxt generate`), surface to the user:
 
-> "This prototype's framework needs a server runtime — static deploy won't work. Options: (1) regenerate as html-tailwind via `/feature-mockup:make`, (2) deploy to a Node host (Vercel/Railway — outside this skill's scope), (3) cancel."
+> "This prototype's framework needs a server runtime — static deploy won't work. Options: (1) regenerate as html-tailwind via `/feature-mockup:fm-make`, (2) deploy to a Node host (Vercel/Railway — outside this skill's scope), (3) cancel."
 
 Use `AskUserQuestion` for these options.
 
@@ -314,7 +314,7 @@ Deployed at: {ISO timestamp}
 {Provider-specific notes:}
   - Netlify Drop: Anonymous URL — claim within 1 hour at https://app.netlify.com/drop or it
     will be deleted. Draft site ID: {id}.
-  - Surge.sh: URL is persistent. To redeploy, run /feature-mockup:deploy {feature} again
+  - Surge.sh: URL is persistent. To redeploy, run /feature-mockup:fm-deploy {feature} again
     OR `surge {uploadDir} {subdomain}.surge.sh` directly.
   - Cloudflare Pages: Persistent. To set a custom domain, run
     `wrangler pages project domain add {project-name} <yourdomain.com>`.
@@ -329,7 +329,7 @@ Use `AskUserQuestion`:
 > "Open the deployed URL in browser now?"
 
 Options:
-1. **Open now** — runs the same browser-launch logic as `/feature-mockup:preview` Step 3a (platform-specific `start`/`open`/`xdg-open` with the URL)
+1. **Open now** — runs the same browser-launch logic as `/feature-mockup:fm-preview` Step 3a (platform-specific `start`/`open`/`xdg-open` with the URL)
 2. **Print URL only** — done
 
 ## Step 10 — Optional QR code for mobile preview
@@ -364,4 +364,4 @@ The package is ~5KB and runs ad-hoc via npx — no global install needed.
 End with:
 1. Final URL prominently displayed (clickable in most terminals)
 2. Provider-specific persistence note (anonymous expiry / claim instructions)
-3. Suggested next command (e.g. `/feature-mockup:verify {feature}` to confirm deployed prototype matches reference)
+3. Suggested next command (e.g. `/feature-mockup:fm-verify {feature}` to confirm deployed prototype matches reference)

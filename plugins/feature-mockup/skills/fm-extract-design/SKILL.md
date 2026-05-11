@@ -1,6 +1,6 @@
 ---
-name: extract-design
-description: "Use this when a developer wants to export their front-end's design system (tokens + component list) into a zip that a BA can hand off to /feature-mockup:ingest-theme. Run this from inside the front-end project root. Auto-detects Angular, React, Vue, and Next.js. Invoke for prompts like 'extract design from this project', 'export theme for BA', '/feature-mockup:extract-design'."
+name: fm-extract-design
+description: "Use this when a developer wants to export their front-end's design system (tokens + component list) into a zip that a BA can hand off to /feature-mockup:fm-ingest-theme. Run this from inside the front-end project root. Auto-detects Angular, React, Vue, and Next.js. Invoke for prompts like 'extract design from this project', 'export theme for BA', '/feature-mockup:fm-extract-design'."
 argument-hint: "[--out <path>]"
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
@@ -305,7 +305,7 @@ Components:  {N} listed ({M} presentational, {K} unknown included)
 Warnings:    {list, or "none"}
 
 Hand this zip to the BA. They'll run:
-  /feature-mockup:ingest-theme path/to/fe-design-export.zip
+  /feature-mockup:fm-ingest-theme path/to/fe-design-export.zip
 ```
 
 Done.
