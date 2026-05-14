@@ -1,0 +1,319 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dongquoctien/claude-code-plugins/main/plugins/angular-admin-design/schemas/plan.schema.json",
+  "title": "angular-admin-design feature plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "feature", "domain", "createdAt", "spec", "scope", "screens", "models", "endpoints", "state", "i18n"],
+  "properties": {
+    "version": { "const": 1 },
+    "feature": { "type": "string", "description": "kebab-case feature name (matches folder under routes/)" },
+    "domain": { "type": "string", "description": "Domain prefix without the trailing dash (e.g. 'bs', 'ho', 'fl')" },
+    "scope": {
+      "type": "string",
+      "description": "For subtree projects like partners: 'seller' | 'vendor' | null. For oh-admin: null.",
+      "nullable": true
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["local-file", "jira"],
+          "description": "Where the spec came from."
+        },
+        "sourcePath": { "type": "string", "description": "For local-file: absolute path to the spec.md." },
+        "jiraKey": { "type": "string", "description": "For jira: 'OHM-1234'." },
+        "jiraSummary": { "type": "string" },
+        "jiraStatus": { "type": "string" },
+        "attachments": {
+          "type": "array",
+          "description": "Extra files referenced or attached (paths relative to projectRoot).",
+          "items": { "type": "string" }
+        },
+        "title": { "type": "string", "description": "Human-readable title of the feature." }
+      }
+    },
+    "summary": { "type": "string", "description": "2-3 sentence narrative summary in workingLanguage." },
+    "userStories": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "description": "ac-NN" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "businessRules": {
+      "type": "array",
+      "description": "Domain rules extracted from spec + claude-context/business-rules.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "sourceFile": { "type": "string", "description": "Where this rule was sourced from." }
+        }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "description": "Each screen becomes one container component.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind"],
+        "properties": {
+          "id": { "type": "string", "description": "kebab-case screen id" },
+          "title": { "type": "string", "description": "Display title in workingLanguage" },
+          "kind": {
+            "type": "string",
+            "enum": ["list", "form", "detail", "wizard", "dashboard", "report", "custom"]
+          },
+          "containerClassName": {
+            "type": "string",
+            "description": "Suggested smart-component class name, e.g. BookingCancelComponent"
+          },
+          "route": { "type": "string", "description": "Route path under the feature module, e.g. '' or 'detail/:id'" },
+          "sections": {
+            "type": "array",
+            "description": "Logical UI sections for the screen (search, results grid, edit form, etc.)",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "purpose"],
+              "properties": {
+                "id": { "type": "string" },
+                "purpose": { "type": "string" },
+                "fields": {
+                  "type": "array",
+                  "description": "Form fields if applicable.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "label": { "type": "string" },
+                      "type": {
+                        "type": "string",
+                        "enum": ["text", "number", "email", "password", "select", "multiselect", "checkbox", "radio", "date", "daterange", "datetime", "textarea", "file", "autocomplete", "custom"]
+                      },
+                      "required": { "type": "boolean" },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["label", "value"],
+                          "properties": {
+                            "label": { "type": "string" },
+                            "value": {}
+                          }
+                        }
+                      },
+                      "validation": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Free-form: { pattern, min, max, custom: 'sameAs:passwordConfirm', ... }"
+                      },
+                      "default": {}
+                    }
+                  }
+                },
+                "columns": {
+                  "type": "array",
+                  "description": "Grid columns if section.purpose mentions a grid.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["field", "title"],
+                    "properties": {
+                      "field": { "type": "string" },
+                      "title": { "type": "string" },
+                      "type": { "type": "string", "description": "string | number | date | code | custom" },
+                      "width": { "type": "string" },
+                      "sortable": { "type": "boolean" },
+                      "filterable": { "type": "boolean" }
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "description": "Buttons / CTAs in this section.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "label", "kind"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "label": { "type": "string" },
+                      "kind": { "type": "string", "enum": ["primary", "secondary", "danger", "link", "icon"] },
+                      "dispatches": { "type": "string", "description": "NgRx action it dispatches (camelCase, suggested by planner)." }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models": {
+      "type": "array",
+      "description": "Interfaces this feature needs. If `existingInterface` is set, plugin will reuse instead of creating new.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "purpose"],
+        "properties": {
+          "name": { "type": "string", "description": "Interface name with I-prefix, e.g. IBookingCancelRequest" },
+          "purpose": { "type": "string", "description": "What it represents (request body, response payload, view-model, ...)" },
+          "existingInterface": {
+            "type": "string",
+            "description": "If reusing, path::name of the existing interface from component-catalog.models."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "type"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "optional": { "type": "boolean" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "description": "Backend API endpoints this feature consumes. Drives both real ApiService methods AND MockXxxService stub responses.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "method", "url", "purpose"],
+        "properties": {
+          "id": { "type": "string", "description": "kebab-case id, used as effect/action name root" },
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+          "url": { "type": "string", "description": "URL pattern relative to API base, e.g. '/booking/cancel'" },
+          "purpose": { "type": "string" },
+          "requestModel": { "type": "string", "description": "Interface name from models[] (if applicable)" },
+          "responseModel": { "type": "string" },
+          "fixtureFile": {
+            "type": "string",
+            "description": "Captured-real-response file path (relative to projectRoot). If null, /aad-mock will fall back to AI-generated synthetic data from responseModel."
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["featureKey", "shape"],
+      "description": "NgRx feature-store specification.",
+      "properties": {
+        "featureKey": { "type": "string", "description": "Used as fromModule.featureKey + StoreModule.forFeature key" },
+        "shape": {
+          "type": "object",
+          "description": "Initial state shape — fields with TS types.",
+          "additionalProperties": true
+        },
+        "actions": {
+          "type": "array",
+          "description": "Suggested action names (createAction style). One per endpoint + UI command.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "purpose"],
+            "properties": {
+              "name": { "type": "string" },
+              "purpose": { "type": "string" },
+              "kind": { "type": "string", "enum": ["request", "success", "failure", "ui"] }
+            }
+          }
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "purpose"],
+            "properties": {
+              "name": { "type": "string" },
+              "purpose": { "type": "string" }
+            }
+          }
+        },
+        "effects": {
+          "type": "array",
+          "description": "One effect per request action.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "endpointId"],
+            "properties": {
+              "name": { "type": "string" },
+              "endpointId": { "type": "string", "description": "References endpoints[].id" }
+            }
+          }
+        }
+      }
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keys"],
+      "description": "i18n keys this feature introduces. Format follows the project's i18nFlow.",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "default"],
+            "properties": {
+              "key": { "type": "string", "description": "Dot-separated key, e.g. 'booking.cancel.title'" },
+              "default": { "type": "string", "description": "English default value (or the working language baseline)" },
+              "context": { "type": "string", "description": "Where it's used (screen + section)" }
+            }
+          }
+        }
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "description": "Unresolved questions the planner couldn't answer from the spec.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "description": "q-NN" },
+          "text": { "type": "string" },
+          "blocks": {
+            "type": "string",
+            "enum": ["nothing", "codegen", "mock", "both"],
+            "description": "What this question blocks if unanswered."
+          }
+        }
+      }
+    }
+  }
+}

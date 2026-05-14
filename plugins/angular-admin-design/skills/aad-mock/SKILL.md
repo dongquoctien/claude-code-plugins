@@ -1,0 +1,147 @@
+---
+name: aad-mock
+description: "Use this after /aad-generate to wire mock-data + InjectionToken into a feature so the UI runs end-to-end without backend. Uses captured response JSON files under mocks/<feature>/ when present; AI-synthesizes from the response interface otherwise. Sets environment.local.ts mockMode=true so the dev server picks up mocks immediately."
+argument-hint: "<feature-kebab-name> [--batch]"
+user-invocable: true
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task, AskUserQuestion
+---
+
+# Angular Admin Design — Mock
+
+Wire mock services + fixtures for: **$ARGUMENTS**
+
+## Step 1 — Load config + locate scaffolded feature
+
+1. Find `.claude/angular-admin-design.json`. If missing, stop with init reminder.
+2. Extract: `projectRoot`, `workingLanguage`, `outputDir`, `profile.routesPath`, `profile.sharedModulesPath`, `mock.*`, `catalog.path`.
+
+`$ARGUMENTS`:
+- First token: `<feature>` (required)
+- `--batch`: optional — auto-write without confirm
+
+Compute:
+- `featureDir = {projectRoot}/{outputDir}/{feature}`  (plan home)
+- `featureRoot = {projectRoot}/{profile.routesPath}/{feature}`  (generated code home — drop scope segment when null)
+- `fixturesSourceDir = {projectRoot}/{mock.fixturesDir or 'mocks'}/{feature}`
+- `fixturesAssetsDir = {projectRoot}/src/assets/mocks/{feature}`
+- `planPath = {featureDir}/plan.json`
+
+**Validate**:
+- `planPath` exists → ELSE stop "Run `/aad-plan` first."
+- `featureRoot/<feature>.module.ts` exists → ELSE stop "Run `/aad-generate` first."
+
+**All user-facing output below in `workingLanguage`.**
+
+## Step 2 — Inspect captured fixtures
+
+Use `Glob` on `{fixturesSourceDir}/*.json` to list captured files.
+
+Show the user:
+
+```
+Captured fixtures found at {fixturesSourceDir}:
+  - {fixtureFilename1}
+  - ...
+{N} captured fixture(s) — endpoints without a match will be synthesized.
+```
+
+If `fixturesSourceDir` doesn't exist at all, warn:
+
+> "No captured fixtures at `{fixturesSourceDir}`. The plugin will synthesize all responses from interfaces. To use real data later, drop JSON files into that folder and re-run /aad-mock."
+
+## Step 3 — Confirm scope
+
+Use `AskUserQuestion`:
+
+> "How should /aad-mock proceed?"
+> Options:
+> - "Generate mocks + wire token (Recommended)" — full pipeline
+> - "Only synthesize missing fixtures — leave service/module wiring alone" — just sync fixtures
+> - "Show me which env files will be touched first" — surface the file list, then ask again
+
+If "Show me first": print the list of env files the agent will touch (`environment.local.ts` will be set to `mockMode: true`; others get `mockMode: false` added if missing; `environment.prod.ts` left alone). Re-ask.
+
+## Step 4 — Delegate to mock-generator agent
+
+Use `Task` to launch the **mock-generator** subagent with:
+
+```
+feature:           {feature}
+projectRoot:       {projectRoot}
+pluginRoot:        {pluginRoot}
+featureRoot:       {featureRoot}
+planPath:          {planPath}
+catalogPath:       {projectRoot}/{catalog.path}
+workingLanguage:   {workingLanguage}
+fixturesSourceDir: {fixturesSourceDir}
+fixturesAssetsDir: {fixturesAssetsDir}
+mode:              {hybrid | batch}
+```
+
+The agent runs the full pipeline (interface → token → mock service → fixtures → providers → effects rewire → env files).
+
+Wait. Surface its summary verbatim.
+
+## Step 5 — Log to timeline
+
+```bash
+node {pluginRoot}/scripts/timeline.mjs append \
+  --feature-dir "{featureDir}" \
+  --kind mock \
+  --summary "Mocked {feature}: {capturedCount} captured + {syntheticCount} synthetic fixtures, env.local mockMode=true" \
+  --data '{"capturedCount":<n>,"syntheticCount":<n>,"fixturesSourceDir":"<rel path>","fixturesAssetsDir":"<rel path>"}'
+```
+
+Then resolve open questions blocked on mock (status from `timeline.mjs read`):
+
+```bash
+# For each question in plan.openQuestions[] with blocks ∈ {mock, both} that the mock now answers:
+node {pluginRoot}/scripts/timeline.mjs resolve-question \
+  --feature-dir "{featureDir}" \
+  --id <q.id> \
+  --event mock
+```
+
+## Step 6 — Final report
+
+```
+Mocks wired: {featureRoot}/services/
+
+Files (new):
+  ✓ <feature>-api.service.interface.ts
+  ✓ <feature>-api.token.ts
+  ✓ <feature>-api-mock.service.ts
+
+Files (edited):
+  ✓ services/index.ts                — barrel exports
+  ✓ <feature>.module.ts              — providers[] added
+  ✓ <feature>.effects.ts             — @Inject(token)
+
+Fixtures:
+  Source : {fixturesSourceDir}  ({capturedCount} captured + {syntheticCount} synthetic)
+  Runtime: {fixturesAssetsDir}
+
+Environment:
+  ✓ environment.local.ts             — mockMode: true
+  ✓ environment.ts / .dev / .staging — mockMode: false (default)
+  ⊘ environment.prod.ts               — untouched (prod never silently mocks)
+
+Run the UI:
+  cd {projectRoot}
+  npm run serve              # ← env.local is loaded, mocks active
+
+When backend is ready:
+  /angular-admin-design:aad-switch {feature} --off
+```
+
+If any synthetic fixtures were created, end with:
+
+```
+⚠ {N} fixture(s) are AI-synthesized. They contain placeholder values flagged with `_synthetic: true`.
+  Replace them with captured responses before staging:
+    1. Hit the endpoint in DevTools / Postman
+    2. Save the response JSON to {fixturesSourceDir}/<endpoint-id>.json
+    3. Re-run /aad-mock {feature}
+```
+
+Done.

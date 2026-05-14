@@ -13,7 +13,10 @@ Add this repo as a marketplace, then install plugins by name:
 
 ## Plugins
 
-_None yet — this marketplace is just getting started._
+| Plugin | Audience | Purpose |
+|---|---|---|
+| [`feature-mockup`](./plugins/feature-mockup) | BA / planner | Turn feature description + screenshots into a runnable HTML/React mockup, optionally themed with the team's real front-end design |
+| [`angular-admin-design`](./plugins/angular-admin-design) | Dev | Spec.md or Jira task → reuse-map → scaffold Angular NgRx feature module with shared-module reuse + mock fixtures behind a one-flag InjectionToken switch |
 
 ## Repository layout
 

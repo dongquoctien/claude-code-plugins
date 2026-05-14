@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "angular-admin-design",
+  "version": "0.1.0",
+  "description": "Spec-driven Angular admin generator: read spec.md (or Jira task) → reuse-map → scaffold NgRx feature modules with shared-module + Kendo reuse, mock-first with one-flag switch to real API.",
+  "author": {
+    "name": "Dong Quoc Tien",
+    "email": "dev.vn@ohmyhotel.com"
+  },
+  "homepage": "https://github.com/dongquoctien/claude-code-plugins/tree/main/plugins/angular-admin-design",
+  "repository": "https://github.com/dongquoctien/claude-code-plugins",
+  "license": "MIT",
+  "keywords": ["angular", "admin", "ngrx", "kendo", "codegen", "scaffold", "mock", "spec-driven"]
+}
