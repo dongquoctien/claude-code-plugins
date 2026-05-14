@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dongquoctien/claude-code-plugins/main/plugins/angular-admin-design/schemas/config.schema.json",
+  "title": "angular-admin-design project config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workingLanguage", "projectRoot", "profile"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "workingLanguage": {
+      "type": "string",
+      "enum": ["en", "ko", "vi"],
+      "description": "Language used for prompts to the user and human-readable artifacts (plan.md, reuse-map.md, STATUS.md)."
+    },
+    "projectRoot": {
+      "type": "string",
+      "description": "Absolute path to the Angular project root (where angular.json lives)."
+    },
+    "outputDir": {
+      "type": "string",
+      "description": "Where AAD writes per-feature artifacts (plan / reuse-map / timeline) relative to projectRoot.",
+      "default": "docs/aad"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ngrxLayout", "sharedModulesPath", "routesPath", "domainPrefixes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Detected profile name, e.g. 'oh-admin', 'ohmyhotel-partners', or 'custom'."
+        },
+        "ngrxLayout": {
+          "type": "string",
+          "description": "Comma-separated list of NgRx folders the project uses (e.g. 'actions,reducers,effects,services,components,containers,models').",
+          "default": "actions,reducers,effects,services,components,containers,models"
+        },
+        "sharedModulesPath": {
+          "type": "string",
+          "description": "Path (relative to projectRoot) where reusable UI modules live.",
+          "default": "src/app/shared/modules"
+        },
+        "routesPath": {
+          "type": "string",
+          "description": "Path (relative to projectRoot) where feature modules live.",
+          "default": "src/app/routes"
+        },
+        "domainPrefixes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed domain prefixes (fl-, ho-, av-, bs-, ...). aad-plan validates feature names against this list."
+        },
+        "defaultDomainPrefix": {
+          "type": "string",
+          "description": "Used when /aad-plan is called without an explicit prefix (e.g. 'bs-')."
+        },
+        "kendoVersion": {
+          "type": "string",
+          "description": "Detected @progress/kendo-angular-grid version. Codegen uses this to pick syntax variants."
+        },
+        "angularVersion": {
+          "type": "string",
+          "description": "Detected @angular/core version. Codegen uses this to avoid standalone-component patterns for Angular < 14."
+        },
+        "i18nFlow": {
+          "type": "string",
+          "enum": ["scan-download", "json-inline", "ngx-translate-inline", "none"],
+          "description": "scan-download: team runs `scan:i18n` then `download:i18n` (partners). json-inline: plugin writes directly to src/assets/i18n/*.json."
+        },
+        "i18nScanScript": {
+          "type": "string",
+          "description": "npm script name that scans the codebase for i18n keys (e.g. 'scan:i18n')."
+        },
+        "i18nKeyFile": {
+          "type": "string",
+          "description": "Path (relative to projectRoot) where i18n source keys live, if the project uses a single source file."
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Where component-catalog.json is written relative to projectRoot.",
+          "default": ".claude/angular-admin-design/component-catalog.json"
+        },
+        "lastIndexedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "jira": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "mcpServer": {
+          "type": "string",
+          "description": "Name of the MCP server providing Jira tools (e.g. 'mcp-atlassian').",
+          "default": "mcp-atlassian"
+        },
+        "projectKey": {
+          "type": "string",
+          "description": "Default Jira project key, used when aad-plan receives a bare issue number."
+        }
+      }
+    },
+    "mock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fixturesDir": {
+          "type": "string",
+          "description": "Where captured response JSON files live (relative to projectRoot).",
+          "default": "mocks"
+        },
+        "injectionTokenSuffix": {
+          "type": "string",
+          "default": "_SERVICE_TOKEN"
+        },
+        "envFlagPath": {
+          "type": "string",
+          "description": "Property path inside environment.ts that toggles mock mode.",
+          "default": "mockMode"
+        }
+      }
+    }
+  }
+}

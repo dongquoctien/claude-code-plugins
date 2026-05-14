@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dongquoctien/claude-code-plugins/main/plugins/angular-admin-design/schemas/component-catalog.schema.json",
+  "title": "angular-admin-design component catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "projectRoot", "indexedAt", "shared", "features", "models", "kendo"],
+  "properties": {
+    "version": { "const": 1 },
+    "projectRoot": { "type": "string" },
+    "indexedAt": { "type": "string", "format": "date-time" },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sharedCount": { "type": "integer" },
+        "featureCount": { "type": "integer" },
+        "modelCount": { "type": "integer" },
+        "kendoModules": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "shared": {
+      "type": "array",
+      "description": "Reusable UI components under shared/modules — these are what aad-plan tries to reuse first.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "selector", "modulePath", "componentPath"],
+        "properties": {
+          "name": { "type": "string", "description": "Component class name, e.g. DropdownComponent" },
+          "selector": { "type": "string", "description": "Angular selector, e.g. app-dropdown" },
+          "moduleName": { "type": "string", "description": "NgModule class name, e.g. DropdownModule" },
+          "modulePath": { "type": "string", "description": "Import path relative to projectRoot, e.g. src/app/shared/modules/dropdown/dropdown.module" },
+          "componentPath": { "type": "string" },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "kind": { "enum": ["field", "getter-setter"] }
+              }
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" }
+              }
+            }
+          },
+          "implementsCVA": {
+            "type": "boolean",
+            "description": "True if the component implements ControlValueAccessor (i.e. usable as a form control)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["form-control", "grid", "dialog", "layout", "data-display", "input", "other"]
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-line description suggested by the indexer (best-effort)."
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "description": "Existing feature modules under routes/. aad-plan checks these to avoid duplicating an existing feature.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "domain"],
+        "properties": {
+          "name": { "type": "string", "description": "Folder name, e.g. bs-event, ho-reservation-list-ota" },
+          "domain": { "type": "string", "description": "Domain prefix (fl/ho/av/bs/...)" },
+          "path": { "type": "string" },
+          "moduleClassName": { "type": "string" },
+          "moduleFile": { "type": "string" },
+          "hasNgRxStore": { "type": "boolean" },
+          "containers": { "type": "array", "items": { "type": "string" } },
+          "components": { "type": "array", "items": { "type": "string" } },
+          "services": { "type": "array", "items": { "type": "string" } },
+          "imports": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other shared/feature modules this module imports — surface signal for 'how things are wired'."
+          }
+        }
+      }
+    },
+    "models": {
+      "type": "array",
+      "description": "TypeScript interfaces (I-prefixed) found across the project — used by aad-mock as a fallback when no captured fixture exists.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "type"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "optional": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "kendo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string" },
+        "modules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Detected @progress/kendo-angular-* packages (e.g. grid, dropdowns, inputs)."
+        }
+      }
+    }
+  }
+}
