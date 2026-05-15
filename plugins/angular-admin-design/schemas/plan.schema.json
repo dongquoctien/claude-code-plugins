@@ -34,7 +34,74 @@
           "description": "Extra files referenced or attached (paths relative to projectRoot).",
           "items": { "type": "string" }
         },
-        "title": { "type": "string", "description": "Human-readable title of the feature." }
+        "title": { "type": "string", "description": "Human-readable title of the feature." },
+        "prototypes": {
+          "type": "array",
+          "description": "(v0.5.0) UI prototypes referenced in the spec — detected by scripts/detect-prototype.mjs. Skill optionally invokes Chrome MCP to snapshot each one, saves to .spec/prototype-snapshots/.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "source", "confidence", "status"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["github-io", "static-host", "sandbox", "live-url", "local-html", "local-react", "local-file"],
+                "description": "github-io / static-host (netlify/vercel/etc) / sandbox (codesandbox/stackblitz) / live-url (other hosts) / local-html / local-react (.tsx/.jsx) / local-file"
+              },
+              "source": {
+                "type": "string",
+                "description": "URL or absolute/relative path."
+              },
+              "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "status": {
+                "type": "string",
+                "enum": ["detected", "user-confirmed", "user-skipped", "inspected", "inspection-failed"],
+                "description": "Lifecycle: detected → user-confirmed → inspected. Or detected → user-skipped. Or detected → inspection-failed (MCP error, URL unreachable, etc)."
+              },
+              "contextLine": {
+                "type": "string",
+                "description": "The line in the spec where the prototype reference was found (for human review)."
+              },
+              "lineNumber": { "type": "integer" },
+              "sourceFile": {
+                "type": "string",
+                "description": "Spec file (relative to projectRoot) the reference was found in."
+              },
+              "hostHint": { "type": ["string", "null"] },
+              "inspectedAt": { "type": "string", "format": "date-time" },
+              "snapshotPath": {
+                "type": "string",
+                "description": "Path (relative to planDir) where the Chrome MCP accessibility-tree snapshot was saved. NOTE: take_snapshot output is plain-text (.txt), not JSON — file ends .txt."
+              },
+              "screenshotPath": {
+                "type": "string",
+                "description": "Path (relative to planDir) where the screenshot PNG was saved."
+              },
+              "secondarySnapshots": {
+                "type": "array",
+                "description": "Additional snapshots captured by walking the prototype (e.g. after clicking entry-point button to reveal drawer/modal). Each is { label, snapshotPath, screenshotPath }.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "snapshotPath"],
+                  "properties": {
+                    "label": { "type": "string", "description": "What this captures, e.g. 'drawer', 'tab-Booking', 'modal-history'." },
+                    "snapshotPath": { "type": "string" },
+                    "screenshotPath": { "type": "string" }
+                  }
+                }
+              },
+              "inspectionError": {
+                "type": "string",
+                "description": "Populated when status=inspection-failed."
+              },
+              "note": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "summary": { "type": "string", "description": "2-3 sentence narrative summary in workingLanguage." },
