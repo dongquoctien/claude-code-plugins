@@ -219,10 +219,45 @@ mcp__chrome-devtools__click(uid: <entry-button-uid>, includeSnapshot: true)
 mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-drawer.txt")
 mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-drawer.png", fullPage: true)
 
+# 5.5. Multi-route detection (v0.7.0)
+#      Run detect-prototype-routes.mjs on the initial snapshot to find sibling
+#      routes (hash/path-based). If routes.length > 0 with score >= 0.3
+#      (relevant routes for THIS feature, not just sidebar nav noise),
+#      ask user via AskUserQuestion:
+#        "Detected {N} additional routes that match the feature scope. Walk all?"
+#        Options:
+#          - Yes — walk all relevant routes (Recommended)
+#          - Pick subset via multi-select
+#          - Skip — just walk current route
+#
+#      For each selected route:
+#        mcp__chrome-devtools__navigate_page(url: route.url)
+#        mcp__chrome-devtools__wait_for(text: <heuristic from route.label>)
+#        mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-route-{slug}-entry.txt")
+#        mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-route-{slug}-entry.png")
+#        # Then continue with auto-walk step 6 below for THIS route's snapshot
+#        # (recursive inner walking).
+#
+#      Save each route's snapshots to plan.spec.prototypes[i].routes[k].walked = true
+#      with snapshotPath / screenshotPath. Filename pattern:
+#        {i}-{kind}-route-{slug}-entry.txt
+#        {i}-{kind}-route-{slug}-walk-{j}-{label}.txt
+#
+#      If no relevant routes (all score < 0.3 — single-screen feature like ELS-1313),
+#      skip route walking entirely. Continue to step 6 below with the initial snapshot.
+
+Bash:
+  node {pluginRoot}/scripts/detect-prototype-routes.mjs \
+    --in-file "{tempDir}/aad-proto-{i}-entry.txt" \
+    --feature {feature} \
+    --budget 5
+
 # 6. Auto-walk loop (v0.6.0)
 #    Run walk-prototype.mjs on the drawer snapshot to find walk candidates
 #    (tabs, modal triggers, accordions, dropdowns). Click each in priority
 #    order, snapshot after each. Cap at WALK_BUDGET (default 5).
+#    v0.7.0: when multi-route detected, run THIS auto-walk loop INSIDE
+#    each route's navigation. So total snapshots = routes.length × walks_per_route.
 Bash:
   node {pluginRoot}/scripts/walk-prototype.mjs \
     --in-file "{tempDir}/aad-proto-{i}-drawer.txt" \

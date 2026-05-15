@@ -1,12 +1,23 @@
-# Prototype inspection — v0.6.0
+# Prototype inspection — v0.7.0
 
-When a spec references a runnable prototype (URL or local file), the plugin can fetch it via Chrome DevTools MCP, **auto-walk** through interactive elements (tabs / modals / accordions), and use the **classifier agent** to flag deviations vs project catalog. This doc describes what to extract, how to phrase findings in `plan.json`, and how to handle deviations between prototype and project conventions.
+When a spec references a runnable prototype (URL or local file), the plugin can fetch it via Chrome DevTools MCP, **detect sibling routes**, **auto-walk** through each route's interactive elements, and use the **classifier agent** to flag deviations vs project catalog. This doc describes what to extract, how to phrase findings in `plan.json`, and how to handle deviations between prototype and project conventions.
 
-## v0.6.0 changes
+## v0.7.0 changes
 
-- **Auto-walk** in Step 5.6 — after initial snapshot, plugin runs `walk-prototype.mjs` to find clickable candidates (tabs, modal triggers, accordions, dropdowns), then clicks each in priority order (max 5 per prototype) and captures a snapshot after each. Walking reveals UI state hidden behind interaction (e.g. mode tabs in the vcomm drawer).
-- **prototype-classifier agent** (new Step 5.7) — reads all snapshots + catalog, classifies each UI element as match / partial-match / no-match. Outputs `deviations.json` with severity (critical / warning / info). User resolves critical via AskUserQuestion before spec-analyzer runs.
-- spec-analyzer reads both snapshots AND deviations — injects user-resolved bespoke components into plan, adds warnings to openQuestions[].
+- **Multi-route detection** in Step 5.5 (new sub-step before main walk) — `detect-prototype-routes.mjs` parses the initial snapshot, finds sibling routes (hash router #/path, path router /screen, or main nav links). Each route with score ≥ 0.3 is treated as a separate screen.
+- **Multi-route walking** in Step 5.6 — for each relevant route, navigate + initial snapshot + auto-walk inner candidates. Filename pattern `{i}-{kind}-route-{slug}-entry.txt` and `{i}-{kind}-route-{slug}-walk-{j}-{label}.txt`.
+- **Classifier groups by route** — `deviations.json` now has `byRoute: {slug: [dev-ids]}` index. Cross-route shared patterns flagged as `info / shared-pattern`.
+- **spec-analyzer maps routes to screens** (new Step 1.7) — uses slug/label similarity to map each prototype route to one of plan.screens[i]. Writes routeMap to plan. Per-route deviations injected only into matching screen.
+
+## v0.6.0 changes (kept for reference)
+
+- **Auto-walk** in Step 5.6 — after initial snapshot, plugin runs `walk-prototype.mjs` to find clickable candidates (tabs, modal triggers, accordions, dropdowns), then clicks each in priority order (max 5 per prototype) and captures a snapshot after each.
+- **prototype-classifier agent** (Step 5.7) — reads all snapshots + catalog, classifies each UI element. Outputs `deviations.json` with severity (critical / warning / info). User resolves critical via AskUserQuestion.
+- spec-analyzer Step 1.6 — reads snapshots + deviations, injects user-resolved bespoke components into plan.
+
+## Backward compat verified on ELS-1313
+
+ELS-1313 prototype has only 1 effective feature route (`/dynamic-rate-override-config`) — sidebar nav links score low (0-0.2). Detector correctly returns 0 routes ≥ 0.3, plan falls back to single-screen behavior. Multi-route logic is **opt-in by signal**, not always-on.
 
 > **Important caveat (read first)**: prototype only describes **logic of events, actions, layout & data display**. UI deviations that breaks project's design system OR introduces patterns not in `catalog.shared[*]` **must** be flagged as `openQuestions[]` and confirmed with dev before codegen — never silently adopted.
 

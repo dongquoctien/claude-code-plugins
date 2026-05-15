@@ -90,9 +90,41 @@
                   "properties": {
                     "label": { "type": "string", "description": "What this captures, e.g. 'drawer', 'tab-Booking', 'modal-history'." },
                     "snapshotPath": { "type": "string" },
+                    "screenshotPath": { "type": "string" },
+                    "route": { "type": "string", "description": "(v0.7.0) Route slug this snapshot was taken in. Omitted for single-screen prototypes." }
+                  }
+                }
+              },
+              "routes": {
+                "type": "array",
+                "description": "(v0.7.0) Sibling routes detected via detect-prototype-routes.mjs. Each represents a separate screen the prototype navigates to.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "url", "slug"],
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["hash", "path", "nav-link"]
+                    },
+                    "url": { "type": "string" },
+                    "slug": { "type": "string", "description": "Last meaningful URL segment used as filename suffix" },
+                    "label": { "type": "string" },
+                    "location": {
+                      "type": "string",
+                      "enum": ["main", "dialog", "banner", "sidebar", "other"]
+                    },
+                    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "walked": { "type": "boolean", "description": "Whether the skill walked this route + captured snapshots" },
+                    "snapshotPath": { "type": "string", "description": "Initial snapshot for this route (if walked)" },
                     "screenshotPath": { "type": "string" }
                   }
                 }
+              },
+              "routeMap": {
+                "type": "object",
+                "description": "(v0.7.0) Map of route slug → plan.screens[i].id. Populated by spec-analyzer after deciding which prototype route maps to which planned screen.",
+                "additionalProperties": { "type": "string" }
               },
               "inspectionError": {
                 "type": "string",

@@ -121,6 +121,43 @@ After processing all deviations, summarize in plan.summary:
 
 > "Plan augmented with prototype findings. {N} critical deviations resolved by user, {N} warning deviations noted for reuse-mapper, {N} info matches confirmed."
 
+## Step 1.7 — Multi-route mapping (v0.7.0)
+
+If `prototypes[i].routes[]` exists with `walked: true` entries, the prototype has multiple screens. After you propose `plan.screens[]` in Step 2, map each walked route to the most similar plan screen:
+
+```
+for each prototype.routes[k] with walked=true:
+  routeSlug = route.slug
+  routeLabel = route.label
+  bestMatch = null
+  bestScore = 0
+
+  for each plan.screens[j]:
+    score = max(
+      slugSimilarity(routeSlug, screen.id),          # e.g. levenshtein
+      labelSimilarity(routeLabel, screen.title),
+    )
+    if score > bestScore:
+      bestMatch = screen.id
+      bestScore = score
+
+  if bestScore >= 0.5:
+    prototype.routeMap[routeSlug] = bestMatch
+  else:
+    # No good match — flag as openQuestion
+    openQuestions.push({
+      id: 'q-NN',
+      text: `Prototype route '${routeSlug}' (${routeLabel}) has no matching plan screen. Add as new screen, or treat prototype route as out-of-scope?`,
+      blocks: 'codegen'
+    })
+```
+
+If `deviations.json.byRoute[<slug>]` exists for this route, the per-route deviations should be injected ONLY into the matching plan.screen entry. Don't pollute other screens with deviations they don't have.
+
+For `deviations.byRoute._default` (snapshots without route prefix, or single-screen prototype), deviations apply across all screens.
+
+For `category: 'shared-pattern'` deviations (same element in multiple routes), don't inject into screens — instead, note in plan.summary as confirmation of project's existing shared component usage.
+
 ## Step 2 — Identify the feature shape
 
 From the spec, extract:
