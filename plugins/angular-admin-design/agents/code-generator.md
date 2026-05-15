@@ -134,6 +134,254 @@ After 3 consecutive "Skip" choices, ask: "You've skipped 3 files in a row. Conti
 
 **Auto-confirm fast-path**: if the user opts into batch mode AT THE START or after several writes, switch from per-file `AskUserQuestion` to writing without confirm. Always offer this opt-in.
 
+## Step 3.5 — Contract validation gate (v0.3.0, MANDATORY)
+
+**This step runs for every file, even in batch mode.** It's the safety net that catches the 8 v0.1.0 build-blocking bugs (handleError, file-saver, flat gridState, [pageable]=object, etc.) before they hit disk.
+
+For each pending file, BEFORE calling Write:
+
+1. **Pick the validation kind** from the file role:
+
+   | File | `--kind` flag |
+   |---|---|
+   | `effects/<feature>.effects.ts` | `effects` |
+   | `services/<feature>-api.service.ts` | `service` |
+   | `<feature>.module.ts` | `module` |
+   | `reducers/<feature>.reducer.ts` | `reducer-inner` |
+   | `reducers/index.ts` | `reducer-outer` |
+   | `actions/<feature>.actions.ts` | `actions` |
+   | `containers/<feature>.component.ts` | `container-ts` |
+   | `containers/<feature>.component.html` | `container-html` |
+   | `components/<feature>-<sub>.component.ts` | `component-ts` |
+   | `components/<feature>-<sub>.component.html` | `component-html` |
+   | `models/api-path.models.ts` | `api-path` |
+
+   Other files (`index.ts` barrels, model files, .scss) skip validation — they have no contract surface.
+
+2. **Write content to a temp file and invoke the validator:**
+
+   ```bash
+   # Use a deterministic temp path so re-runs don't accumulate junk.
+   tmpFile="{projectRoot}/.aad-tmp/{feature}/{kind}.ts"
+   mkdir -p "$(dirname "$tmpFile")"
+   # Write the proposed content to tmpFile via Write tool first.
+
+   node {pluginRoot}/scripts/validate-against-catalog.mjs \
+     --catalog "{projectRoot}/{catalog.path}" \
+     --reference "{projectRoot}/.claude/angular-admin-design/reference-features.json" \
+     --kind {kind} \
+     --feature {feature} \
+     --content-file "$tmpFile" \
+     --json
+   ```
+
+3. **Parse the JSON output:**
+
+   ```json
+   {
+     "ok": false,
+     "violations": [
+       { "severity": "error", "rule": "coreServiceMethodExists", "location": "line 26",
+         "message": "Method 'handleError' does not exist on 'ErrorHandlerService'.",
+         "suggestedFix": "Did you mean 'errorHandler'? Valid methods: ..." },
+       { "severity": "error", "rule": "importExists", "location": "line 3",
+         "message": "Import 'file-saver' is not installed.",
+         "suggestedFix": "Use URL.createObjectURL + <a download> pattern." }
+     ],
+     "summary": { "errors": 2, "warnings": 0 }
+   }
+   ```
+
+4. **If `ok === true`** AND `summary.warnings === 0`: proceed to Write.
+
+5. **If `ok === true`** AND warnings exist: surface them but proceed (these are advisory). Track in a `warnings[]` collection to summarize at the end.
+
+6. **If `ok === false`** (errors present): DO NOT call Write yet. Two paths:
+
+   **Path A — Auto-fix (preferred for known rules):**
+   For each error, try a deterministic auto-fix based on `rule`:
+
+   - `coreServiceMethodExists` rule with closest match in `suggestedFix`: rewrite the call site to use the suggested method. For the canonical `handleError` → `errorHandler` case, also insert the `_catchErr` private helper at the bottom of the class (see `knowledge/ngrx-feature-store.md` "effects/<feature>.effects.ts — canonical from bs-event").
+
+   - `importExists` rule for `file-saver`: remove the import, replace `saveAs(blob, fn)` calls with `this._downloadBlob(blob, fn)`, insert the `_downloadBlob` private helper. (Pattern in `knowledge/kendo-grid-patterns.md` "Excel export".)
+
+   - `gridStateShape` rule: replace flat `{ skip, take, sort, filter }` with nested `{ pageInfo: { skip, take }, sortInfo: [] }`. Mechanical string replace.
+
+   - `selectorNaming` rule (`selectFeatureState` → `selectModuleState`): mechanical string replace.
+
+   - `apiPathFileNaming` rule: rename the import path `../models/api-path.model` → `../models/api-path.models`. ALSO update the actual filename when you generate `models/api-path.models.ts` (note plural).
+
+   - `styleExtensionMatch` rule: replace `.css` → `.scss` (or vice versa) in `styleUrls`, AND ensure the actual style file is generated with the right extension.
+
+   After auto-fixing, re-run the validator on the patched content. If it passes, Write. If new violations appeared, try Path B.
+
+   **Path B — Ask user (fallback for ambiguous):**
+   Use `AskUserQuestion`:
+
+   > "Validation found {N} unresolved error(s) in {filePath} after auto-fix. Choose:"
+   > - "Apply suggested fix from validator (if available)"
+   > - "Accept content as-is and add TODO inline" (only safe for warnings)
+   > - "Skip this file entirely — I'll write it manually"
+   > - "Abort /aad-generate"
+
+   For "Apply suggested fix": surface the validator's `suggestedFix` field and let the user confirm the mechanical rewrite.
+
+7. **Final state for the file:**
+
+   - `approved` → Write to disk. Track in `generatedFiles[]`.
+   - `approved-with-warnings` → Write but mention in final report.
+   - `auto-fixed-then-approved` → Write the patched content. Add `autoFixes[]` entry to final summary.
+   - `user-resolved` → Write the final content the user picked.
+   - `skipped` → Don't write. Track in `skippedFiles[]`.
+   - `aborted` → Stop the entire `/aad-generate` run.
+
+8. **Cleanup temp files:** `rm -rf {projectRoot}/.aad-tmp/{feature}/` at the end of the run.
+
+### Reporting auto-fixes
+
+At the end of the run, include in the summary:
+
+```
+Auto-fixed during generation:
+  ✓ effects/<feature>.effects.ts: handleError → errorHandler + injected _catchErr helper
+  ✓ effects/<feature>.effects.ts: removed file-saver import, replaced saveAs with _downloadBlob helper
+  ✓ reducers/<feature>.reducer.ts: gridState flat shape → nested pageInfo/sortInfo
+```
+
+The user can grep `autoFixes[]` from the timeline event to audit what changed.
+
+## Step 3.6 — Section splitting rule (v0.3.0)
+
+**Goal: match bs-event's container/components layout.** bs-event splits its container into search/form/order-list/control sub-components — the container is ~150 lines, not 600. v0.1.0 generated a 233-line container with all sections inlined, which violates the project's smart/presentational separation.
+
+### Splitting triggers
+
+For each section in `plan.screens[*].sections[*]`:
+
+| Condition | Action |
+|---|---|
+| `section.fields?.length > 3` | **Split** into `components/<feature>-<section>.component.ts` |
+| `section.id === 'search'` (always) | **Split** — search is canonically its own component |
+| `section.id === 'form'` OR section has nested form groups | **Split** — forms are canonically their own component |
+| `section.id === 'toolbar'` AND fewer than 2 actions | Inline in container (trivial) |
+| `section.id === 'result-grid'` | Usually inline — grid is the focal point of the container |
+| `section.kind === 'detail'` OR has nested popups | **Split** — match bs-event/components/control |
+
+### Sub-component shape (presentational)
+
+When splitting, the generated component is **dumb** — receives data via @Input, emits user actions via @Output. NO Store injection, NO selectors, NO effects dispatch.
+
+```typescript
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+
+@Component({
+  selector: 'app-<feature>-<section>',
+  templateUrl: './<feature>-<section>.component.html',
+  styleUrls: ['./<feature>-<section>.component.scss'],
+})
+export class <Feature><Section>Component implements OnInit {
+  // Inputs — data the container provides via [prop]="value$ | async"
+  @Input() options: I<...>[] = [];
+  @Input() loading = false;
+  @Input() defaultValue: any;
+
+  // Outputs — user actions bubbled up to the container for dispatch
+  @Output() searchEvent = new EventEmitter<I<...>SearchCondition>();
+  @Output() resetEvent = new EventEmitter<void>();
+
+  form: FormGroup;
+
+  constructor(private fb: FormBuilder) {}
+
+  ngOnInit(): void {
+    this.form = this._buildForm();
+  }
+
+  onSearch(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    this.searchEvent.emit(this.form.value);
+  }
+
+  onReset(): void {
+    this.form.reset(this._defaults());
+    this.resetEvent.emit();
+  }
+
+  private _buildForm(): FormGroup { /* per plan.fields */ }
+  private _defaults(): any { /* per plan.fields[*].default */ }
+}
+```
+
+### Container changes when sections are split
+
+Container becomes a thin orchestrator:
+
+```html
+<!-- container.component.html -->
+<div class="page">
+  <h2>{{ pageTitle }}</h2>
+
+  <!-- search section split into sub-component -->
+  <app-<feature>-search
+    [hotelSuggestions]="hotelSuggestions$ | async"
+    [roomTypeOptions]="roomTypeOptions$ | async"
+    [actionOptions]="actionOptions$ | async"
+    (searchEvent)="onSearchSubmit($event)"
+    (resetEvent)="onSearchReset()">
+  </app-<feature>-search>
+
+  <!-- toolbar inlined (trivial) -->
+  <div class="toolbar">
+    <button [disabled]="(exporting$ | async)" (click)="onExportExcel()">Excel</button>
+  </div>
+
+  <!-- result-grid inlined (focal point) -->
+  <app-grid-basis
+    [columns]="columns"
+    [dataList]="list$ | async"
+    ...
+  ></app-grid-basis>
+</div>
+```
+
+Container TS only:
+- Holds Observable streams from store
+- Dispatches actions on @Output events from sub-components
+- Manages the grid columns array (or delegates to data service `generateGridColumns()`)
+- No FormGroup, no validation logic (lives in the search sub-component)
+
+### Module declarations
+
+Both container and sub-components go in `declarations[]` of the feature module. Update `components/index.ts`:
+
+```typescript
+import { <Feature>SearchComponent } from './<feature>-search/<feature>-search.component';
+import { <Feature>FormComponent }   from './<feature>-form/<feature>-form.component';
+
+export { <Feature>SearchComponent, <Feature>FormComponent };
+export const COMPONENTS = [<Feature>SearchComponent, <Feature>FormComponent];
+```
+
+Each sub-component lives in its own folder:
+```
+components/
+├── <feature>-search/
+│   ├── <feature>-search.component.ts
+│   ├── <feature>-search.component.html
+│   └── <feature>-search.component.scss
+└── index.ts
+```
+
+### When NOT to split
+
+- Section has 0 fields and 0 actions (decoration / placeholder)
+- Section has ≤2 simple buttons (inline in container)
+- Single-screen feature where `screens.length === 1` AND total field count across all sections ≤ 3 (entire feature can be a one-component container)
+
 ## Step 4 — Content generation rules
 
 For each file kind, follow the knowledge files. Key rules:
