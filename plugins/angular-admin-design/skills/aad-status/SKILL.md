@@ -17,7 +17,9 @@ Find `.claude/angular-admin-design.json`. If missing, stop with:
 
 Extract: `projectRoot`, `workingLanguage`, `outputDir`.
 
-Bind `aadDir = {projectRoot}/{outputDir}` (e.g. `D:/Code/oh-admin/docs/aad`).
+Bind:
+- `planRoot = {projectRoot}/{outputDir}` (e.g. `D:/Code/oh-admin/docs/aad`) — for plan artifacts
+- `stateRoot = {projectRoot}/{config.stateDir || outputDir}` (e.g. `D:/Code/oh-admin/.claude/aad`) — for timeline/STATUS (v0.4.0)
 
 **All user-facing output below in `workingLanguage`.**
 
@@ -27,16 +29,16 @@ Bind `aadDir = {projectRoot}/{outputDir}` (e.g. `D:/Code/oh-admin/docs/aad`).
 
 If `$ARGUMENTS` is empty:
 
-1. Use `Glob` on `{aadDir}/*/.timeline.json` to enumerate every tracked feature.
+1. Use `Glob` on `{stateRoot}/*/.timeline.json` to enumerate every tracked feature.
 2. If none found:
    ```
-   No features tracked yet under {aadDir}.
+   No features tracked yet under {stateRoot}.
    Start with: /angular-admin-design:aad-plan <feature> <spec.md or JIRA:KEY>
    ```
    Stop.
 3. For each feature, run:
    ```bash
-   node {pluginRoot}/scripts/timeline.mjs read --feature-dir "{aadDir}/{feature}"
+   node {pluginRoot}/scripts/timeline.mjs read --feature-dir "{stateRoot}/{feature}"
    ```
    Capture `feature`, `currentPhase`, `lastActivityAt`, `totals.*`, and counts of pending open questions.
 4. Print a table sorted by `lastActivityAt` descending:
@@ -63,9 +65,11 @@ Stop.
 
 ### Mode B — Argument: detail for one feature
 
-If `$ARGUMENTS` is set, bind `feature = <first token>`. Compute `featureDir = {aadDir}/{feature}`.
+If `$ARGUMENTS` is set, bind `feature = <first token>`. Compute:
+- `stateDir = {stateRoot}/{feature}`
+- `planDir = {planRoot}/{feature}`
 
-If `featureDir` doesn't exist OR `featureDir/.timeline.json` is missing:
+If `stateDir` doesn't exist OR `stateDir/.timeline.json` is missing:
 ```
 Feature '{feature}' is not tracked. Did you mean:
   • <closest match 1>
@@ -79,20 +83,22 @@ Stop.
 The timeline script already maintains a human-readable `STATUS.md`. Refresh it first, then read and print:
 
 ```bash
-node {pluginRoot}/scripts/timeline.mjs regenerate-status --feature-dir "{featureDir}"
+node {pluginRoot}/scripts/timeline.mjs regenerate-status --feature-dir "{stateDir}"
 ```
 
-Then `Read {featureDir}/STATUS.md` and print its contents verbatim to the user.
+Then `Read {stateDir}/STATUS.md` and print its contents verbatim to the user.
 
 ## Step 4 — Add file inventory (detail mode only)
 
 After STATUS.md, list the artifacts present:
 
 ```
-Artifacts at {featureDir}:
+Plan artifacts at {planDir}:
   ✓ plan.md / plan.json                — present
   ✓ reuse-map.md / reuse-map.json      — present
   {✓|⊘} mock-spec.json                 — {present|missing}
+
+State at {stateDir}:
   ✓ STATUS.md                          — auto-generated
   ✓ .timeline.json                     — auto-generated
 ```

@@ -21,9 +21,10 @@ Scaffold the feature module from plan + reuse-map: **$ARGUMENTS**
 - `--batch`: optional flag — switch to non-interactive mode (auto-Write every file). Otherwise Hybrid per-file confirmation.
 
 Compute:
-- `featureDir = {projectRoot}/{outputDir}/{feature}`
-- `planPath = {featureDir}/plan.json`
-- `reuseMapPath = {featureDir}/reuse-map.json`
+- `planDir = {projectRoot}/{outputDir}/{feature}` (plan artifacts)
+- `stateDir = {projectRoot}/{config.stateDir || outputDir}/{feature}` (timeline + STATUS — v0.4.0)
+- `planPath = {planDir}/plan.json`
+- `reuseMapPath = {planDir}/reuse-map.json`
 
 Validation:
 - If `planPath` missing: stop with "No plan found. Run `/angular-admin-design:aad-plan {feature} <spec>`."
@@ -63,7 +64,7 @@ Show them and ask `AskUserQuestion`:
 
 If "Show me each question": run `AskUserQuestion` per question. For each answer, write to `plan.json` under `answeredQuestions[]` AND mark resolved:
 ```bash
-node {pluginRoot}/scripts/timeline.mjs resolve-question --feature-dir "{featureDir}" --id <q.id>
+node {pluginRoot}/scripts/timeline.mjs resolve-question --feature-dir "{stateDir}" --id <q.id>
 ```
 
 ## Step 4 — Batch mode opt-in
@@ -110,11 +111,29 @@ The agent returns a summary including `generatedFiles[]` and `skippedFiles[]`. S
 
 ```bash
 node {pluginRoot}/scripts/timeline.mjs append \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --kind generate \
   --summary "Generated {feature}: {generatedCount} files ({reuseCount} reuse, {newCount} new)" \
   --data '{"files":<JSON array of relative paths>,"generatedCount":<n>,"skippedCount":<n>,"mode":"<hybrid|batch>"}'
 ```
+
+## Step 7.5 — Auto-run /aad-verify (v0.4.0)
+
+Offer to run `/aad-verify` immediately so any TypeScript errors are surfaced before the user moves on:
+
+Use `AskUserQuestion`:
+
+> "Generation complete. Run /aad-verify now to catch any TypeScript errors?"
+> Options:
+> - "Yes — verify TS only" (Recommended — fast, ~10s)
+> - "Yes — verify TS + full ng build" (slow, 3-5 min; catches template errors too)
+> - "Skip — I'll verify later"
+
+If user picks verify, invoke the `aad-verify` skill internally — pass `<feature>` (and `--build-check` if user picked option 2). Surface the verify output verbatim.
+
+If verify reports errors AND user is in batch mode, the verify skill will offer its own auto-fix path. Don't add new prompts here — let aad-verify handle it.
+
+If user picks "Skip", remind them at the end of the final report.
 
 ## Step 8 — Wiring hint
 
@@ -151,7 +170,7 @@ Wire the lazy route (paste into app-routing.module.ts):
   <route stanza above>
 
 Open questions still pending: {N}
-  See {featureDir}/STATUS.md
+  See {stateDir}/STATUS.md
 
 Next step:
   /angular-admin-design:aad-mock {feature}

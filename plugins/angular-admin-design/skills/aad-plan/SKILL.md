@@ -14,9 +14,13 @@ Produce a structured plan + reuse-map for: **$ARGUMENTS**
 
 1. Find `.claude/angular-admin-design.json` (cwd or one level up). If missing, stop with:
    > "Not configured. Run `/angular-admin-design:aad-init` first."
-2. Extract: `projectRoot`, `workingLanguage`, `outputDir` (default `docs/aad`), `profile.*`, `catalog.path`, `jira.*`.
+2. Extract: `projectRoot`, `workingLanguage`, `outputDir` (default `docs/aad`), `stateDir` (v0.4.0 default `.claude/aad` — falls back to `outputDir` if missing in config), `profile.*`, `catalog.path`, `jira.*`.
 3. Verify `{projectRoot}/{catalog.path}` exists. If missing:
    > "Component catalog missing. Run `/angular-admin-design:aad-index` first."
+
+**Resolve dirs (v0.4.0):**
+- `planDir = {projectRoot}/{outputDir}/{feature}` — plan.md, reuse-map.md (committed)
+- `stateDir = {projectRoot}/{stateDir || outputDir}/{feature}` — .timeline.json, STATUS.md (gitignored if stateDir is .claude/aad)
 
 **All user-facing output below this point must be in `workingLanguage`.**
 
@@ -34,11 +38,12 @@ Validation:
   - If `profile.defaultDomainPrefix` is set, ask: "No domain prefix detected in '{feature}'. Use default '{defaultDomainPrefix}'?"
   - Else use `AskUserQuestion` listing the top 5 prefixes by feature count from `catalog.features` + "Custom prefix" + "Continue without prefix".
 
-Compute:
-- `featureDir = {projectRoot}/{outputDir}/{feature}`
-- If `featureDir` already exists with a `plan.json` inside, ask: "A plan already exists. Re-plan from scratch / append open-question answers / cancel?"
+Compute (v0.4.0):
+- `planDir = {projectRoot}/{outputDir}/{feature}` — for plan artifacts
+- `stateDir = {projectRoot}/{config.stateDir || outputDir}/{feature}` — for timeline / STATUS
+- If `planDir` already exists with a `plan.json` inside, ask: "A plan already exists. Re-plan from scratch / append open-question answers / cancel?"
 
-Create `featureDir` if missing.
+Create both `planDir` and `stateDir` if missing. (Plan artifacts go in planDir; timeline files go in stateDir.)
 
 ## Step 3 — Resolve spec source
 
@@ -63,8 +68,8 @@ If `<spec-source>` starts with `JIRA:` (e.g. `JIRA:OHM-1234`):
    - Look in the response for the **acceptance criteria** custom field. It's commonly `customfield_10004` or a field named "Acceptance Criteria" — match by `field.name === 'Acceptance Criteria'`.
 5. Download attachments:
    - For each attachment id, call `mcp__mcp-atlassian__jira_download_attachments` with `issue_key` and the attachment id.
-   - Save to `{featureDir}/.spec/jira-{jiraKey}/attachments/`.
-6. Write a consolidated `{featureDir}/.spec/jira-{jiraKey}/bundle.md`:
+   - Save to `{planDir}/.spec/jira-{jiraKey}/attachments/`.
+6. Write a consolidated `{planDir}/.spec/jira-{jiraKey}/bundle.md`:
 
    ```markdown
    # Jira {jiraKey} — {summary}
@@ -114,7 +119,7 @@ specPath:          {specPath}
 specAttachments:   {specAttachments}
 claudeContextDir:  {claudeContextDir or null}
 catalogPath:       {projectRoot}/{catalog.path}
-outputPath:        {featureDir}/plan.json
+outputPath:        {planDir}/plan.json
 ```
 
 Wait for the agent. It writes `plan.json` and `plan.md` and returns a one-line summary.
@@ -122,7 +127,7 @@ Wait for the agent. It writes `plan.json` and `plan.md` and returns a one-line s
 If the agent reports more than 0 open questions with `blocks` ∈ `{codegen, both}`, surface them prominently:
 
 ```
-⚠ {N} open question(s) block codegen — review {featureDir}/plan.md before /aad-generate:
+⚠ {N} open question(s) block codegen — review {planDir}/plan.md before /aad-generate:
   • q-01 ({blocks}) — {text}
 ```
 
@@ -131,10 +136,10 @@ If the agent reports more than 0 open questions with `blocks` ∈ `{codegen, bot
 Use `Task` to launch **reuse-mapper** with:
 
 ```
-planPath:        {featureDir}/plan.json
+planPath:        {planDir}/plan.json
 catalogPath:     {projectRoot}/{catalog.path}
-outputPath:      {featureDir}/reuse-map.json
-mdOutputPath:    {featureDir}/reuse-map.md
+outputPath:      {planDir}/reuse-map.json
+mdOutputPath:    {planDir}/reuse-map.md
 workingLanguage: {workingLanguage}
 ```
 
@@ -150,18 +155,18 @@ If the plan has open questions, ask the user `AskUserQuestion` for the first 3 (
 > 2. "Defer — edit plan.md manually later"
 > 3. "Skip this question"
 
-For each answered question, edit `{featureDir}/plan.json` to set the answer in a new top-level field `answeredQuestions[]`, and call:
+For each answered question, edit `{planDir}/plan.json` to set the answer in a new top-level field `answeredQuestions[]`, and call:
 
 ```bash
 node {pluginRoot}/scripts/timeline.mjs resolve-question \
-  --feature-dir "{featureDir}" --id {q.id}
+  --feature-dir "{stateDir}" --id {q.id}
 ```
 
 ## Step 9 — Log to timeline
 
 ```bash
 node {pluginRoot}/scripts/timeline.mjs append \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --kind plan \
   --summary "Planned {feature}: {screenCount} screen(s), {endpointCount} endpoint(s), reuse {reusedCount}/{newCount}" \
   --data '{"reuse":{"reusedCount":<n>,"newCount":<n>},"specSource":"<local-file|jira>","jiraKey":"<or null>"}'
@@ -172,7 +177,7 @@ Then sync open questions to timeline:
 ```bash
 echo '[{"id":"q-01","text":"...","blocks":"codegen"}, ...]' > /tmp/aad-questions-{feature}.json
 node {pluginRoot}/scripts/timeline.mjs sync-questions \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --questions-file /tmp/aad-questions-{feature}.json
 ```
 
@@ -183,7 +188,8 @@ node {pluginRoot}/scripts/timeline.mjs sync-questions \
 Print in `workingLanguage`:
 
 ```
-Plan ready: {featureDir}
+Plan ready: {planDir}
+State (timeline + STATUS): {stateDir}
 
 Files:
   • plan.md             — human-readable feature breakdown

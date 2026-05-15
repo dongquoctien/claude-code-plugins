@@ -20,17 +20,44 @@ Wire mock services + fixtures for: **$ARGUMENTS**
 - `--batch`: optional — auto-write without confirm
 
 Compute:
-- `featureDir = {projectRoot}/{outputDir}/{feature}`  (plan home)
+- `planDir = {projectRoot}/{outputDir}/{feature}`  (plan home — committed)
+- `stateDir = {projectRoot}/{config.stateDir || outputDir}/{feature}` (timeline — v0.4.0)
 - `featureRoot = {projectRoot}/{profile.routesPath}/{feature}`  (generated code home — drop scope segment when null)
 - `fixturesSourceDir = {projectRoot}/{mock.fixturesDir or 'mocks'}/{feature}`
 - `fixturesAssetsDir = {projectRoot}/src/assets/mocks/{feature}`
-- `planPath = {featureDir}/plan.json`
+- `planPath = {planDir}/plan.json`
 
 **Validate**:
 - `planPath` exists → ELSE stop "Run `/aad-plan` first."
 - `featureRoot/<feature>.module.ts` exists → ELSE stop "Run `/aad-generate` first."
 
 **All user-facing output below in `workingLanguage`.**
+
+## Step 1.5 — Verify angular.json assets (v0.4.0)
+
+Mock service reads fixtures at runtime from `src/assets/mocks/<feature>/...`. Angular's asset pipeline must include `src/assets` in `angular.json` `projects.<name>.architect.build.options.assets[]`.
+
+Read `{projectRoot}/angular.json`:
+
+```bash
+# Pseudo-code:
+const ng = JSON.parse(fs.readFileSync('{projectRoot}/angular.json'));
+const proj = Object.keys(ng.projects)[0];
+const assets = ng.projects[proj].architect.build.options.assets;
+const hasAssets = assets.some(a => a === 'src/assets' || (typeof a === 'object' && a.input === 'src/assets'));
+```
+
+Most Angular projects auto-include `src/assets`, but some custom configs strip it. If missing:
+
+Use `AskUserQuestion`:
+
+> "angular.json doesn't include `src/assets` in build assets. Mock fixtures at runtime require this path. What now?"
+> Options:
+> - "Add 'src/assets' to angular.json automatically" (Recommended)
+> - "I'll fix it manually — abort /aad-mock"
+> - "Skip the check — I know my project structure"
+
+If user picks "Add automatically", use `Edit` to insert `"src/assets"` into the assets array of the default project. Confirm what's been changed.
 
 ## Step 2 — Inspect captured fixtures
 
@@ -86,7 +113,7 @@ Wait. Surface its summary verbatim.
 
 ```bash
 node {pluginRoot}/scripts/timeline.mjs append \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --kind mock \
   --summary "Mocked {feature}: {capturedCount} captured + {syntheticCount} synthetic fixtures, env.local mockMode=true" \
   --data '{"capturedCount":<n>,"syntheticCount":<n>,"fixturesSourceDir":"<rel path>","fixturesAssetsDir":"<rel path>"}'
@@ -97,7 +124,7 @@ Then resolve open questions blocked on mock (status from `timeline.mjs read`):
 ```bash
 # For each question in plan.openQuestions[] with blocks ∈ {mock, both} that the mock now answers:
 node {pluginRoot}/scripts/timeline.mjs resolve-question \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --id <q.id> \
   --event mock
 ```
