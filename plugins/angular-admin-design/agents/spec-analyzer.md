@@ -31,11 +31,11 @@ outputPath:        absolute path where plan.json must be written
 - For each path in `specAttachments`: Read it. If image, describe what you see (layout, fields, buttons, copy). If PDF >10 pages, use `pages: "1-10"`.
 - For each `*.md` under `claudeContextDir`: Read it. Pay particular attention to `business-rules.md` and `integration-flow.md` — these tell you the project's domain vocabulary and API patterns.
 
-## Step 1.5 — Read prototype snapshots (v0.5.0)
+## Step 1.5 — Read prototype snapshots + deviations (v0.5.0 + v0.6.0)
 
 For each entry in `prototypes[]` where `status === 'inspected'`:
 
-1. Read the snapshot JSON at `{planDir}/{prototype.snapshotPath}`. The snapshot is Chrome DevTools' `take_snapshot` output — a flat tree of UI nodes with `uid`, `role`, `name` (visible text), and structural children.
+1. Read the snapshot at `{planDir}/{prototype.snapshotPath}`. The snapshot is plain-text accessibility tree (`.txt` file, NOT JSON), format `uid=X_Y <role> "<label>" <attrs>`.
 2. (Optional) Look at the screenshot PNG at `{prototype.screenshotPath}` for visual context if available.
 3. Extract these UI signals — they augment what spec prose says but may not have called out:
 
@@ -82,6 +82,44 @@ q-NN: blocks=codegen (critical) — Prototype shows CrossRefMatrix component (cu
 ### When `prototypes[]` is empty or no `inspected` entries
 
 Skip Step 1.5 entirely. Build plan from spec + claude-context only.
+
+## Step 1.6 — Read deviations.json (v0.6.0)
+
+If `{planDir}/deviations.json` exists (produced by prototype-classifier subagent in /aad-plan Step 5.7), read it:
+
+```json
+{
+  "stats": { "bySeverity": { "critical": N, "warning": N, "info": N } },
+  "deviations": [
+    {
+      "id": "dev-NN",
+      "elementRole": "tab",
+      "elementLabel": "...",
+      "severity": "critical" | "warning" | "info",
+      "category": "match" | "partial-match" | "no-match" | "summary",
+      "catalogMatch": { "candidate": "...", "score": 0.55 },
+      "message": "...",
+      "suggestedAction": "...",
+      "userResolution": "accept-feature-component" | "use-catalog-match" | "add-openquestion" | "skip" | null,
+      "userNote": "..."
+    }
+  ]
+}
+```
+
+For each deviation, decide what to inject into plan based on `userResolution`:
+
+| userResolution | What to do in plan |
+|---|---|
+| `accept-feature-component` | Add a new entry to `plan.screens[*].sections[*].components` or treat as a new section. Suggest class name from elementLabel. Add a `prototypeRef` linking back to the snapshot/screenshot. |
+| `use-catalog-match` | No structural change to plan — just note in plan.summary that the catalog component might need an adapter wrapper. reuse-mapper will see catalogMatch and decide. |
+| `add-openquestion` | Add to `plan.openQuestions[]` with `blocks: codegen` (severity=critical) or `blocks: nothing` (severity=warning/info). |
+| `skip` | Ignore — element not relevant. |
+| `null` (no user resolution) | If severity=critical, escalate to openQuestion automatically (`blocks: codegen`). If severity=warning, add as openQuestion with `blocks: nothing`. Info → just log. |
+
+After processing all deviations, summarize in plan.summary:
+
+> "Plan augmented with prototype findings. {N} critical deviations resolved by user, {N} warning deviations noted for reuse-mapper, {N} info matches confirmed."
 
 ## Step 2 — Identify the feature shape
 
