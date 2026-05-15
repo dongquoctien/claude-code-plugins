@@ -59,6 +59,35 @@ Use `AskUserQuestion`:
 
 If user picks "Add automatically", use `Edit` to insert `"src/assets"` into the assets array of the default project. Confirm what's been changed.
 
+## Step 1.6 — Inspect prototype network captures (v0.7.1)
+
+Check if `/aad-plan` captured XHR/fetch responses during prototype walk:
+
+```
+prototypeNetDir = {planDir}/.spec/prototype-network
+```
+
+If directory exists, use `Glob` on `{prototypeNetDir}/*.json` (skip `.meta.json`). For each captured response:
+
+1. Read the matching `.meta.json` to get URL + method.
+2. Try to match against `plan.endpoints[*]` by:
+   - URL similarity (path Levenshtein, method match)
+   - Endpoint method must match (GET → GET, POST → POST)
+3. If high-confidence match (URL ends with same path, same method): mark endpoint with `prototypeNetworkSource: '<file>'`.
+
+Show user the matched mapping:
+
+```
+Prototype network captures matched to endpoints:
+  ✓ get-history → .spec/prototype-network/api-history-list.json (12 KB, GET /api/.../history)
+  ✓ list-actions → .spec/prototype-network/api-action-codes.json (1 KB, GET /api/.../actions)
+  ⊘ export-excel — no prototype capture (prototype didn't trigger this endpoint)
+
+These will be used as primary fixtures (instead of /aad-mock synthesizing data).
+```
+
+If no `prototypeNetDir` exists, skip this step — proceed to Step 2 (look at `mocks/<feature>/`).
+
 ## Step 2 — Inspect captured fixtures
 
 Use `Glob` on `{fixturesSourceDir}/*.json` to list captured files.

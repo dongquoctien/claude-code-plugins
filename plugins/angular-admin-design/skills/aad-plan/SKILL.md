@@ -170,54 +170,107 @@ Mark every prototype in the plan with `status` field:
 - `user-skipped` — user said skip
 - low-confidence prototypes NOT in user's pick → `user-skipped`
 
-## Step 5.6 — Inspect prototypes via Chrome DevTools MCP (v0.5.0)
+## Step 5.6 — Inspect prototypes via browser MCP (v0.5.0 → v0.7.1)
 
-For each prototype with `status === 'user-confirmed'`, the skill itself invokes Chrome MCP tools (NOT a subagent — keeps tool access at skill level).
+For each prototype with `status === 'user-confirmed'`, the skill invokes browser MCP tools (NOT a subagent — keeps tool access at skill level).
 
-### Important constraints (v0.5.0 — verified at implementation)
+### Step 5.6.0 — Detect available browser MCPs (v0.7.1)
 
-1. **MCP file path constraint**: `mcp__chrome-devtools__take_snapshot` and `mcp__chrome-devtools__take_screenshot` ONLY accept paths within registered workspace roots. They will reject paths outside (e.g. arbitrary project directory). **Workaround**: save to system temp dir (always accessible) then `cp` to final location.
+Before invoking any MCP tool, check which backends are available via ToolSearch:
 
-2. **Snapshot output is `.txt`, not `.json`**: `take_snapshot` writes a plain-text accessibility tree (lines like `uid=X_Y RootWebArea ...`). It is human-readable. Do NOT expect JSON.
+```
+hasPlaywright = (ToolSearch loads mcp__playwright__browser_navigate)
+hasChromeDevTools = (ToolSearch loads mcp__chrome-devtools__new_page)
+```
+
+Bind `backendChoice`:
+
+| Playwright | Chrome DevTools | backendChoice | Behavior |
+|---|---|---|---|
+| ✓ | ✓ | `both` | Playwright for navigate/walk/snapshot; Chrome DevTools for network bodies + lighthouse |
+| ✓ | ✗ | `playwright-only` | All walking via Playwright; skip Chrome-exclusive features |
+| ✗ | ✓ | `chrome-only` | All walking via Chrome DevTools (v0.5.0-v0.7.0 behavior preserved) |
+| ✗ | ✗ | `none` | Skip inspection for all prototypes; set `status: 'inspection-failed'` with `inspectionError: 'no browser MCP available'` |
+
+If `both`, also ask user (optional, once per session):
+
+> "Both Playwright and Chrome DevTools MCPs are available. Preferred backend for prototype inspection?"
+> Options:
+> - "Best per task" (Recommended — Playwright for snapshot/walk, Chrome DevTools for network)
+> - "Playwright only" — single browser, simpler
+> - "Chrome DevTools only" — v0.7.0 backward compat
+
+See `knowledge/mcp-browser-tools.md` for the per-task decision matrix.
+
+### Step 5.6.1 — Constraints carried over from v0.5.0
+
+1. **File path constraint**: Both MCPs reject paths outside registered workspace roots. Workaround: save to system temp dir first, then `Bash cp` to final `.spec/prototype-snapshots/` location.
+
+2. **Snapshot output format differs**:
+   - Chrome DevTools `take_snapshot` → plain-text uid-tree (`.txt` file)
+   - Playwright `browser_snapshot` → markdown a11y tree (`.md` file)
+   - Skill writes filename extension based on chosen backend; spec-analyzer reads both formats.
 
 3. **SPA prototypes need walking**: many prototypes load to a list/entry view. To capture the deep screen (modal, drawer, detail), the skill must click entry-point buttons after initial snapshot.
+
+4. **Browser sessions don't share**: Playwright and Chrome DevTools run separate browser processes. If you navigate via Playwright then need Chrome DevTools network capture, you must RE-NAVIGATE Chrome DevTools to the same URL. Don't expect cross-backend page state.
 
 ### Workflow
 
 ```
 snapshotDir = {planDir}/.spec/prototype-snapshots
+networkDir  = {planDir}/.spec/prototype-network         # v0.7.1
 tempDir = system temp (e.g. C:\Users\<u>\AppData\Local\Temp on Windows, /tmp on POSIX)
 
-Bash: mkdir -p {snapshotDir}
+Bash: mkdir -p {snapshotDir} {networkDir}
 ```
+
+### Backend dispatch (v0.7.1)
+
+Per-task MCP selection — see `knowledge/mcp-browser-tools.md` for the full matrix.
+
+| Task | If `backendChoice` is `playwright-only` or `both` | If `chrome-only` |
+|---|---|---|
+| Navigate | `mcp__playwright__browser_navigate(url)` | `mcp__chrome-devtools__new_page(url)` |
+| Wait | `mcp__playwright__browser_wait_for(text: ...)` | `mcp__chrome-devtools__wait_for(text: [...])` |
+| Snapshot | `mcp__playwright__browser_snapshot(filename: 'X.md', depth: 8)` | `mcp__chrome-devtools__take_snapshot(filePath: 'X.txt')` |
+| Screenshot | `mcp__playwright__browser_take_screenshot(filename: 'X.png', fullPage: true, type: 'png')` | `mcp__chrome-devtools__take_screenshot(filePath: 'X.png', fullPage: true)` |
+| Click | `mcp__playwright__browser_click(element: '<desc>', target: '<ref>')` | `mcp__chrome-devtools__click(uid: 'X_Y', includeSnapshot: true)` |
+| Network list (v0.7.1 always) | `mcp__playwright__browser_network_requests(filter: '/api/', static: false)` | `mcp__chrome-devtools__list_network_requests(resourceTypes: ['xhr','fetch'])` |
+| Network body (v0.7.1 always) | (use Chrome DevTools — Playwright's per-request detail in `browser_network_request` doesn't save to file) | `mcp__chrome-devtools__get_network_request(reqid: N, responseFilePath: 'X.json')` |
+| Close | `mcp__playwright__browser_close()` | `mcp__chrome-devtools__close_page(pageId: N)` |
+
+In examples below, the placeholder `<NAV>`, `<WAIT>`, `<SNAPSHOT>`, `<CLICK>` represent the chosen backend's call per the table above.
+
+### Per-prototype walk loop
 
 For each confirmed prototype, in serial:
 
 ```
 i = 1-based prototype index
+kind = prototype.kind (github-io / local-html / sandbox / ...)
 
-# 1. Open the prototype in a new page
-mcp__chrome-devtools__new_page(url: "<source>")
+# 1. Navigate
+<NAV>(url: "<source>")
 
-# 2. Wait for SPA to render — use a text hint specific to the feature
-#    For ELS-1313 vcomm: wait_for(text: ["Override", "Mode", "Trader"])
-#    (Use text/labels mentioned in spec attachments as proxy for "loaded")
-mcp__chrome-devtools__wait_for(text: [<2-3 expected labels from spec>])
+# 2. Wait for SPA to render
+<WAIT>(text: <2-3 expected labels from spec>)
 
 # 3. Initial snapshot (entry view)
-mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-entry.txt")
-mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-entry.png", fullPage: true)
+<SNAPSHOT>(filename or filePath: "{tempDir}/aad-proto-{i}-entry.<ext>")
+<SCREENSHOT>(filename or filePath: "{tempDir}/aad-proto-{i}-entry.png", fullPage: true)
+# .<ext> = .md for Playwright (browser_snapshot), .txt for Chrome DevTools
 
-# 4. Identify entry-point button — scan snapshot text for buttons matching:
+# 4. Identify entry-point button — scan snapshot for buttons matching:
 #    - "Open", "Edit", "Configure", "Details", "View", "Configure Override"
-#    The first matching uid is the entry point. If multiple, prefer the one
-#    whose surrounding text best matches the feature name from spec.
+#    Markdown snapshot (Playwright): look for `[button "Open"](#ref-X)` patterns
+#    Text snapshot (Chrome DevTools): look for `uid=X_Y button "Open"` lines
 
 # 5. Click entry point and take secondary snapshot (drawer/modal view)
-mcp__chrome-devtools__click(uid: <entry-button-uid>, includeSnapshot: true)
-# If snapshot in click response is enough, skip the next 2 calls. Else:
-mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-drawer.txt")
-mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-drawer.png", fullPage: true)
+<CLICK>(element-or-uid: <entry>)
+<WAIT>(text: <drawer hint label>)
+<SNAPSHOT>(filename or filePath: "{tempDir}/aad-proto-{i}-drawer.<ext>")
+<SCREENSHOT>(filename or filePath: "{tempDir}/aad-proto-{i}-drawer.png", fullPage: true)
 
 # 5.5. Multi-route detection (v0.7.0)
 #      Run detect-prototype-routes.mjs on the initial snapshot to find sibling
@@ -311,15 +364,54 @@ for j in 0..min(5, candidates.length):
       mcp__chrome-devtools__click(uid: <entry-button-uid>)
       mcp__chrome-devtools__click(uid: <drawer-trigger-uid>)
 
-# 7. Close page
-mcp__chrome-devtools__list_pages()  # to get the pageId
-mcp__chrome-devtools__close_page(pageId: <prototype-page-id>)
+# 7. Network capture for /aad-mock fixture base (v0.7.1)
+#    Walk has captured all the API calls the prototype made (initial load + per click).
+#    Save XHR/fetch response bodies so /aad-mock can later use them as captured fixtures.
+#    Skip when chrome-devtools MCP unavailable (Playwright-only backend can list but
+#    can't save bodies cleanly).
 
-# 8. Move files from tempDir to snapshotDir
-Bash: cp {tempDir}/aad-proto-{i}-entry.{txt,png} {snapshotDir}/{i}-{kind}-entry.{txt,png}
-Bash: cp {tempDir}/aad-proto-{i}-drawer.{txt,png} {snapshotDir}/{i}-{kind}-drawer.{txt,png}
-Bash: cp {tempDir}/aad-proto-{i}-walk-*.{txt,png} {snapshotDir}/
-Bash: rm {tempDir}/aad-proto-{i}-*.{txt,png}
+if backendChoice in ['both', 'chrome-only']:
+  # List API requests with regex filter
+  if hasPlaywright:
+    network_list = mcp__playwright__browser_network_requests(filter: "/api/.*", static: false)
+  else:
+    network_list = mcp__chrome-devtools__list_network_requests(resourceTypes: ['xhr', 'fetch'])
+
+  # For each API request, save response body via Chrome DevTools (explicit file save)
+  for req in network_list (max 30 to prevent runaway):
+    if req.status != 200 OR req.url ends with .css/.js/.png/.svg/.woff/.ico: skip
+    slug = slugify(req.url after origin, max 50 chars)   # e.g. "api-bookings-list"
+    mcp__chrome-devtools__get_network_request(
+      reqid: req.id,
+      responseFilePath: "{tempDir}/aad-proto-{i}-network-{slug}.json"
+    )
+    # Also save request metadata (URL, method, status, request headers/body)
+    Write({tempDir}/aad-proto-{i}-network-{slug}.meta.json, {
+      url: req.url,
+      method: req.method,
+      status: req.status,
+      timestamp: req.timestamp,
+      capturedFromPrototype: prototype.source,
+    })
+
+  # Add to prototype's networkCapture[] array
+  prototype.networkCapture = [
+    { url, method, status, slug, responsePath, metaPath } for each saved
+  ]
+
+# 8. Close page
+if hasPlaywright AND backendChoice in ['playwright-only', 'both']:
+  mcp__playwright__browser_close()
+if hasChromeDevTools AND backendChoice in ['chrome-only', 'both']:
+  mcp__chrome-devtools__list_pages()
+  mcp__chrome-devtools__close_page(pageId: <prototype-page-id>)
+
+# 9. Move files from tempDir to final dirs
+Bash: cp {tempDir}/aad-proto-{i}-entry.{md,txt,png}     {snapshotDir}/{i}-{kind}-entry.<ext>
+Bash: cp {tempDir}/aad-proto-{i}-drawer.{md,txt,png}    {snapshotDir}/{i}-{kind}-drawer.<ext>
+Bash: cp {tempDir}/aad-proto-{i}-walk-*.{md,txt,png}    {snapshotDir}/
+Bash: cp {tempDir}/aad-proto-{i}-network-*.json         {networkDir}/    # v0.7.1
+Bash: rm {tempDir}/aad-proto-{i}-*.{md,txt,png,json}
 ```
 
 Snapshot filenames produced (all relative to planDir):

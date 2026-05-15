@@ -38,8 +38,12 @@
           },
           "fixtureSource": {
             "type": "string",
-            "enum": ["captured", "synthetic", "synthetic-pending"],
-            "description": "captured: real response file on disk. synthetic: AI-generated from interface. synthetic-pending: declared but not yet generated (e.g. q-NN open)."
+            "enum": ["captured", "prototype-captured", "synthetic", "synthetic-pending"],
+            "description": "captured: real response file on disk. prototype-captured (v0.7.1): copied from prototype network capture .spec/prototype-network/. synthetic: AI-generated from interface. synthetic-pending: declared but not yet generated."
+          },
+          "prototypeUrl": {
+            "type": "string",
+            "description": "(v0.7.1) Source prototype URL when fixtureSource === 'prototype-captured'."
           },
           "fixtureFile": {
             "type": "string",
