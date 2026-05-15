@@ -224,21 +224,53 @@ function scanText(text, sourceLabel) {
       // Bare filename without context keyword → not a prototype. Skip entirely.
       if (!hasKeyword) continue;
 
-      const key = `bare::${filename}`;
+      // v0.8.0: try to locate the bare filename on disk in common prototype dirs
+      const resolved = tryLocateBareFile(filename);
+
+      const key = `bare::${resolved || filename}`;
       if (detected.has(key)) continue;
 
       detected.set(key, {
         kind: pathExtKind(filename),
-        source: filename,
-        confidence: 'low',         // bare reference — can't open without context
+        source: resolved || filename,
+        confidence: resolved ? 'medium' : 'low',
         contextLine,
         lineNumber: i + 1,
         sourceFile: sourceLabel,
         hostHint: null,
-        note: 'bare filename — actual location unknown; ask user',
+        note: resolved
+          ? `bare filename resolved to ${resolved}`
+          : 'bare filename — actual location unknown; ask user',
       });
     }
   }
+}
+
+// v0.8.0: hunt for a bare filename in common prototype storage locations
+function tryLocateBareFile(filename) {
+  if (!PROJECT_ROOT || PROJECT_ROOT === '.') return null;
+  // Search dirs in priority order
+  const searchDirs = [
+    '.',                          // project root
+    'docs',
+    'docs/prototypes',
+    'docs/mockups',
+    'docs/design',
+    'prototypes',
+    'mockups',
+    'design',
+    'design/prototypes',
+    '.spec',
+    'specs',
+    'specs/prototypes',
+  ];
+  for (const d of searchDirs) {
+    const candidate = path.join(PROJECT_ROOT, d, filename);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Also: same dir as the spec source file the regex hit came from
+  // (left as todo — would require scanning across input files; skip for v0.8.0)
+  return null;
 }
 
 // ─── Drive ──────────────────────────────────────────────────────────────
