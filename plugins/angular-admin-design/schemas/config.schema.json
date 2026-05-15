@@ -90,6 +90,12 @@
         "lastIndexedAt": { "type": "string", "format": "date-time" }
       }
     },
+    "anchorFeatures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "(v0.2.0) Anchor feature folder names (under routesPath) whose source is captured verbatim into reference-features.json. code-generator uses them as the source of truth for project patterns, instead of hand-written knowledge templates.",
+      "default": ["bs-event", "ho-reservation-list-ota", "ad-dashboard"]
+    },
     "jira": {
       "type": "object",
       "additionalProperties": false,

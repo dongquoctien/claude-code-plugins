@@ -62,26 +62,46 @@ const routes = runJson('crawl-routes.mjs', ['--routes-path', routesPath]);
 log('  • crawl-models');
 const models = runJson('crawl-models.mjs');
 
-// Step 5: assemble
+// Step 5: core services (v0.2.0)
+log('  • crawl-core-services');
+const coreServices = runJson('crawl-core-services.mjs');
+
+// Step 6: package deps (v0.2.0)
+log('  • crawl-package');
+const pkg = runJson('crawl-package.mjs');
+
+// Step 7: assemble
 const catalog = {
-  version: 1,
+  version: 2,
   projectRoot: ROOT.replace(/\\/g, '/'),
   indexedAt: new Date().toISOString(),
   stats: {
     sharedCount: shared.entries.length,
     featureCount: routes.features.length,
     modelCount: models.models.length,
+    coreServiceCount: coreServices.services.length,
+    coreMethodCount: coreServices.services.reduce((n, s) => n + s.methods.length, 0),
+    depCount: Object.keys(pkg.all).length,
+    installedDepCount: pkg.installed.length,
     kendoModules: profile.kendo.modules,
     warnings: [
       ...(profile.warnings || []).map(w => `[profile] ${w}`),
       ...(shared.warnings || []).map(w => `[shared] ${w}`),
       ...(routes.warnings || []).map(w => `[routes] ${w}`),
       ...(models.warnings || []).map(w => `[models] ${w}`),
+      ...(coreServices.warnings || []).map(w => `[core] ${w}`),
     ],
   },
   shared: shared.entries,
   features: routes.features,
   models: models.models,
+  coreServices: coreServices.services,
+  dependencies: {
+    all: pkg.all,
+    installed: pkg.installed,
+    missingFromLockfile: pkg.missingFromLockfile,
+    nodeModulesExists: pkg.nodeModulesExists,
+  },
   kendo: profile.kendo,
 };
 

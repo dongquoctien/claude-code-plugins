@@ -1,81 +1,285 @@
-# Shared modules — when to use what
+# Shared modules — how to find and wire them
 
-When reuse-mapper picks a shared component, codegen must know how to wire it. This is a quick reference for the 37 components in oh-admin (33 in partners — subset). For exact selectors and Inputs, **always** check `component-catalog.json` for the project being generated.
+This doc does NOT list shared components by name. That list lives in `component-catalog.json` and is regenerated every `/aad-index` run. The catalog is the source of truth; this doc is the lookup protocol.
 
-## Form controls (CVA — usable in reactive forms)
+**The rule: never hardcode component names in generated code. Always grep `catalog.shared[*]` first.**
 
-| Selector | Class | Best for | Key Inputs |
-|---|---|---|---|
-| `app-input-text` | `InputTextComponent` | text/number/email/password | `type`, `placeholder`, `maxLength`, `disabled` |
-| `app-input-text-suggestion` | `InputTextSuggestionComponent` | text with suggest dropdown | `options`, `searchTerm` |
-| `app-span-input` | `SpanInputComponent` | inline editable label | `editable` |
-| `app-dropdown` | `DropdownComponent` | single-select static options | `options`, `optionLabel`, `optionValue` |
-| `app-selectbox` | `SelectboxComponent` | single-select w/ dataKey/displayKey | `options`, `dataKey`, `displayKey` |
-| `app-selectbox-2` | `Selectbox2Component` | newer dropdown variant | (project-specific) |
-| `app-selectbox-detailcode` | `SelectboxDetailcodeComponent` | system-code-driven single select | `groupCode`, `useAllOption` |
-| `app-multi-select` | `MultiSelectComponent` | multi-select static options | `options`, `displayKey`, `selectionLimit` |
-| `app-multi-select-detailcode` | `MultiSelectDetailcodeComponent` | system-code-driven multi-select | `groupCode`, `useAllOptionYn` |
-| `app-auto-complete` | `AutoCompleteComponent` | async-search suggest | `apiUrl`, `apiCondition`, `apiSearchTerm`, `searchResultPath`, `(completeMethod)`, `(onSelect)` |
-| `app-checkbox` | `CheckboxComponent` | single checkbox | `label`, `disabled` |
-| `app-radio` | `RadioComponent` | radio group | `options`, `displayKey` |
-| `app-datepicker` | `DatePickerComponent` | single date | `format`, `minDate`, `maxDate` |
-| `app-date` | `DateComponent` | single date alt | (project-specific) |
-| `app-calendar` | `CalendarComponent` | date / **daterange** | `selectionMode: 'single' \| 'range'`, `dateFormat`, `rangeSeparator`, `defaultDate` |
-| `app-month-picker` | `MonthPickerComponent` | month/year picker | `format`, `minDate`, `maxDate` |
-| `app-slider` | `SliderComponent` | numeric range slider | `min`, `max`, `step` |
-| `app-editor` | `EditorComponent` | rich-text WYSIWYG | `mode`, `disabled` |
-| `app-file-upload` | `FileUploadComponent` | file picker | `accept`, `multiple`, `(onFileUpload)` |
+---
 
-## Grids
+## How code-generator MUST consult the catalog
 
-| Selector | Class | Best for |
-|---|---|---|
-| `app-grid-basis` | `GridBasisComponent` | full-featured: sort/page/filter/templates (default choice) |
-| `app-grid-simple` | `GridSimpleComponent` | small static grids (dialogs, summaries) |
-| `app-grid-virtual` | `GridVirtualComponent` | very long lists (>1000 rows) — virtual scroll |
-| `app-grid-row-reorderable` | `GridRowReorderableComponent` | drag-to-sort tables |
+For every UI requirement in `plan.screens[*].sections[*]`:
 
-See `kendo-grid-patterns.md` for templating.
+1. Read `reuse-map.json` → pick the `match.modulePath` for the requirement.
+2. Read `catalog.shared[N]` where `name === match.name` (or `selector === match.selector`).
+3. Use **`inputs[]`** to know which `[attr]="..."` bindings are valid.
+4. Use **`outputs[]`** to know which `(event)="..."` handlers can be wired.
+5. Use **`modulePath`** to know what to add to `imports[]` in the feature module.
+6. If the catalog entry's `inputs[*].type` says `boolean`, generate `[x]="true"` not `[x]="{...}"`.
+7. If the catalog entry's `inputs[*].type` says `TemplateRef<any>` or has flag `isTemplateRef: true`, the binding expects a TemplateRef variable (`@ViewChild('foo') foo: TemplateRef`), not a string literal.
 
-## Dialogs
+**If a catalog entry is missing the input you want, the component does not have it. Do not invent it.** Skip the binding or check for an alternative selector.
 
-| Selector | Class | Best for |
-|---|---|---|
-| `app-dialog` | `DialogComponent` | inline modal (declarative, ng-content) |
-| `app-dynamic-dialog` | `DynamicDialogComponent` | service-opened modal (imperative) |
-| `app-alert` | `AlertComponent` | confirm / warn (use `ConfirmationService.confirm({...})`) |
+---
 
-## Layout
+## Sample lookup workflow (worked example)
 
-| Selector | Class | Best for |
-|---|---|---|
-| `app-tabs` | `TabsComponent` | sub-section tabs in a screen |
-| `app-tab-group` | `TabGroupComponent` | top-level tab navigation |
-| `app-tab-menu` | `TabMenuComponent` | tab strip variant |
-| `app-paginator` | `PaginatorComponent` | standalone pager (rare — grid usually paginates) |
+Given the plan says **"Autocomplete khách sạn — gọi /admin/hotel/autocomplete, debounce + chọn theo hotelCode/hotelName"**:
 
-## Other
+### Step A — Open `reuse-map.json`
 
-| Selector | Class | Best for |
-|---|---|---|
-| `app-region-cascade` | `RegionCascadeComponent` | country → city → district cascade |
-| `app-photo-drag-drop` | `PhotoDragDropComponent` | image upload w/ preview |
-| `app-image-shimmer` | `ImageShimmerComponent` | image with loading skeleton |
-| `app-loading-icon-checked` | `LoadingIconCheckedComponent` | status icon |
-
-## When NONE of these fit
-
-Decide between:
-
-1. **`use-kendo`** — if the gap is filled by a Kendo Angular component the project already has installed. Check `catalog.kendo.modules`.
-2. **`create-feature-component`** — if the missing piece is feature-specific (validation tied to business rules, layout coupled to one screen). Lives in `routes/<feature>/components/`.
-3. **`needs-new-shared`** — if it's clearly reusable elsewhere. **Flag for human review**: the dev should sponsor the new shared module, codegen does not silently create files under `shared/`.
-
-When generating a feature, always **import the SharedModule** that exposes the component, not the component class directly:
-
-```typescript
-import { DropdownModule } from 'src/app/shared/modules/dropdown/dropdown.module';
-// in module imports[]: DropdownModule
+```json
+{
+  "requirement": "Autocomplete khách sạn ...",
+  "decision": "reuse-existing",
+  "match": {
+    "name": "AutoCompleteComponent",
+    "selector": "app-auto-complete",
+    "modulePath": "src/app/shared/modules/auto-complete/auto-complete.module"
+  }
+}
 ```
 
-The class is imported only in TypeScript code that programmatically references it (rare).
+### Step B — Open `catalog.shared` and find the entry
+
+```json
+{
+  "name": "AutoCompleteComponent",
+  "selector": "app-auto-complete",
+  "moduleName": "AutoCompleteModule",
+  "modulePath": "src/app/shared/modules/auto-complete/auto-complete.module",
+  "componentPath": "src/app/shared/modules/auto-complete/auto-complete.component.ts",
+  "implementsCVA": true,
+  "kind": "form-control",
+  "inputs": [
+    { "name": "apiUrl",         "type": "string",   "required": true,  "kind": "field" },
+    { "name": "apiCondition",   "type": "any",      "required": false, "kind": "field" },
+    { "name": "apiSearchTerm",  "type": "string",   "required": false, "kind": "field" },
+    { "name": "searchResultPath", "type": "string[]", "required": false, "kind": "field" },
+    { "name": "placeholder",    "type": "string",   "required": false, "kind": "field" },
+    { "name": "minLength",      "type": "number",   "defaultValue": "1" },
+    { "name": "delay",          "type": "number",   "defaultValue": "300" },
+    { "name": "field",          "type": "string" },
+    { "name": "dataKey",        "type": "string" },
+    { "name": "forceSelection", "type": "boolean",  "defaultValue": "true" },
+    { "name": "isInvalid",      "type": "boolean" }
+    // ... 38 total inputs
+  ],
+  "outputs": [
+    { "name": "completeMethod", "type": "EventEmitter<any>" },
+    { "name": "onSelect",       "type": "EventEmitter<any>" },
+    { "name": "onUnselect",     "type": "EventEmitter<any>" },
+    { "name": "onFocus",        "type": "EventEmitter<any>" },
+    { "name": "onBlur",         "type": "EventEmitter<any>" }
+    // ...
+  ]
+}
+```
+
+### Step C — Generate template using only what the catalog confirms
+
+```html
+<app-auto-complete
+  formControlName="hotelCode"
+  apiUrl="/admin/hotel/autocomplete"
+  [apiCondition]="{ keyword: '' }"
+  apiSearchTerm="keyword"
+  [searchResultPath]="['result', 'list']"
+  field="hotelName"
+  dataKey="hotelCode"
+  placeholder="Search hotel by name or code"
+  (completeMethod)="onHotelComplete($event)"
+  (onSelect)="onHotelSelect($event)">
+</app-auto-complete>
+```
+
+Every attribute above maps to a catalog `inputs[*].name` or `outputs[*].name`. Generator never reaches for an attribute not in the catalog.
+
+### Step D — Generate module imports
+
+```typescript
+import { AutoCompleteModule } from 'src/app/shared/modules/auto-complete/auto-complete.module';
+
+@NgModule({
+  imports: [
+    // ...
+    AutoCompleteModule,  // from catalog.shared[*].modulePath of the auto-complete entry
+  ],
+})
+```
+
+---
+
+## Type-driven binding rules
+
+For each binding, the catalog input type tells you the syntax:
+
+| Catalog input type | Binding syntax |
+|---|---|
+| `string` (no default) | `attr="literal"` or `[attr]="expr"` |
+| `string` (default value) | omit unless overriding |
+| `number` | `[attr]="42"` or `[attr]="expr"` |
+| `boolean` | `[attr]="true"` / `[attr]="false"` — **never `[attr]="{...}"`** |
+| `T[]` (array) | `[attr]="arrayExpr"` |
+| `T \| null` or `T \| undefined` | optional — generate only when plan requires |
+| `TemplateRef<any>` (or `isTemplateRef: true`) | `[attr]="tplRefVar"` where `@ViewChild('tplName') tplRefVar: TemplateRef<any>` |
+| `Observable<T>` (or `isObservable: true`) | `[attr]="obs$ \| async"` — should be Observable from store |
+| `EventEmitter<T>` (output) | `(name)="handler($event)"` |
+
+Default values matter: if `inputs[*].defaultValue === 'true'`, omit the binding unless overriding to false. Cleaner template.
+
+---
+
+## Module wiring rule
+
+After reuse-mapper picks N existing shared components, the feature module's `imports[]` MUST include `<Name>Module` for each unique `match.modulePath` — no duplicates.
+
+```typescript
+// Resolve from reuse-map.json:
+//   uniqueModules = [...new Set(reuseMap.items
+//     .filter(it => it.decision === 'reuse-existing')
+//     .map(it => it.match.modulePath))]
+// For each module path, look up its NgModule class name in catalog.shared:
+//   catalog.shared.find(s => s.modulePath === path).moduleName
+
+import { AutoCompleteModule } from 'src/app/shared/modules/auto-complete/auto-complete.module';
+import { SelectboxModule }    from 'src/app/shared/modules/selectbox/selectbox.module';
+import { CalendarModule }     from 'src/app/shared/modules/calendar/calendar.module';
+// ...
+
+@NgModule({
+  imports: [
+    // ... CommonModule, FormsModule, etc.
+    AutoCompleteModule,
+    SelectboxModule,
+    CalendarModule,
+    // ...
+  ],
+})
+```
+
+---
+
+## CVA components in reactive forms
+
+Catalog `implementsCVA: true` means the component is usable with `formControlName` directly.
+
+```html
+<form [formGroup]="form">
+  <app-selectbox formControlName="hotelCode" ...></app-selectbox>
+  <app-calendar  formControlName="dateRange" ...></app-calendar>
+</form>
+```
+
+Catalog `implementsCVA: false` (rare for input-like components) — bind via `[value]` + `(change)` instead of `formControlName`.
+
+---
+
+## Output event naming convention
+
+The catalog records the output names exactly as they appear in the component. Some are non-standard:
+
+- `(completeMethod)` (auto-complete) — fires during typing for async search
+- `(onSelect)`, `(onUnselect)` (auto-complete)
+- `(onChange)` (multi-select-detailcode)
+- `(stateChangeEvent)` (grid-basis) — page/sort/filter change
+- `(dbClickRowEvent)` (grid-basis) — double-click row
+- `(visibleChange)` (dialog) — dialog open/close
+
+Don't normalize these to camelCase or invent variants. Use the exact name from `catalog.shared[N].outputs[*].name`.
+
+---
+
+## Worked example: building search form section
+
+Given plan section:
+
+```json
+{
+  "id": "search",
+  "fields": [
+    { "name": "hotelCode",    "type": "autocomplete", "label": "Khách sạn" },
+    { "name": "roomTypeCode", "type": "select",       "label": "Loại phòng" },
+    { "name": "dateRange",    "type": "daterange",    "label": "Khoảng thời gian" },
+    { "name": "actions",      "type": "multiselect",  "label": "Loại hành động" }
+  ]
+}
+```
+
+For each field:
+
+1. Find catalog entry by selector matching the field type (per reuse-map).
+2. Check `inputs[]` for the bindings the plan needs (`apiUrl`, `options`, `selectionMode='range'`, `useAllOptionYn`).
+3. If a needed binding isn't in `inputs[]`, the component doesn't support it. Stop and surface to user.
+
+Result:
+
+```html
+<form [formGroup]="form" class="search-section">
+
+  <!-- hotelCode (autocomplete) -->
+  <app-auto-complete
+    formControlName="hotelCode"
+    apiUrl="/admin/hotel/autocomplete"
+    apiSearchTerm="keyword"
+    [searchResultPath]="['result', 'list']"
+    field="hotelName"
+    dataKey="hotelCode"
+    placeholder="...">
+  </app-auto-complete>
+
+  <!-- roomTypeCode (selectbox) -->
+  <app-selectbox
+    formControlName="roomTypeCode"
+    [options]="roomTypeOptions$ | async"
+    dataKey="roomTypeCode"
+    displayKey="roomTypeName"
+    [disabled]="!form.get('hotelCode').value">
+  </app-selectbox>
+
+  <!-- dateRange (calendar with selectionMode='range') -->
+  <app-calendar
+    formControlName="dateRange"
+    selectionMode="range"
+    dateFormat="yy-mm-dd"
+    rangeSeparator=" ~ ">
+  </app-calendar>
+
+  <!-- actions (multi-select-detailcode, system-code-driven) -->
+  <app-multi-select-detailcode
+    formControlName="actions"
+    [options]="actionOptions$ | async"
+    dataKey="value"
+    displayWord="label"
+    [useAllOptionYn]="true">
+  </app-multi-select-detailcode>
+
+</form>
+```
+
+The generator decided **every selector + every attribute** by consulting the catalog. No imagination.
+
+---
+
+## What this doc explicitly does NOT do
+
+- Does not list shared components by name. Use the catalog.
+- Does not describe component appearance. Use the catalog or look at the real `.component.html`.
+- Does not assume default behaviors. The catalog records `defaultValue`; respect it.
+
+If a new shared module is added to the project, `/aad-index` re-runs and the catalog updates. This doc never needs editing.
+
+---
+
+## Common shared kinds and selectors (for orientation — NOT a binding contract)
+
+These are signposts. The catalog has the truth.
+
+- **form-control + CVA** — usable with `formControlName`: dropdown, selectbox, input-text, checkbox, radio, calendar, auto-complete, multi-select, multi-select-detailcode, selectbox-detailcode
+- **grid** — `app-grid-basis` (canonical), `app-grid-simple`, `app-grid-virtual`, `app-grid-row-reorderable`
+- **dialog** — `app-dialog` (declarative ng-content), `app-dynamic-dialog` (service-opened), `app-alert` (confirm/warn via `ConfirmationService`)
+- **input** — `app-input-text`, `app-input-text-suggestion`, `app-span-input`
+- **layout** — `app-tabs`, `app-tab-group`, `app-tab-menu`, `app-paginator`
+- **data-display** — `app-alert`, `app-image-shimmer`, `app-loading-icon-checked`
+
+Always confirm selector + inputs by reading the catalog before generating.

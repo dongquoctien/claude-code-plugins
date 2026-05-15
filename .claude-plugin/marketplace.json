@@ -23,7 +23,7 @@
       "name": "angular-admin-design",
       "source": "./plugins/angular-admin-design",
       "description": "Spec-driven Angular admin generator. Read spec.md or a Jira task, produce a reuse-map of existing shared modules vs new components, then scaffold NgRx feature modules with Kendo + i18n + a mock service that can switch to the real API with one flag.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "category": "codegen",
       "keywords": ["angular", "admin", "ngrx", "kendo", "codegen", "scaffold", "mock", "spec-driven"]
     }
