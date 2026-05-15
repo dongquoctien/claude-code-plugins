@@ -21,6 +21,7 @@ specPath:          absolute path to primary spec content (local .md or Jira-fetc
 specAttachments:   [absolute paths] — optional screenshots, PDFs, extra docs
 claudeContextDir:  absolute path to claude-context/ (or null if the project has no such folder)
 catalogPath:       absolute path to component-catalog.json (for model-name dedup checks)
+prototypes:        (v0.5.0) array of prototype objects from /aad-plan Step 5.5/5.6 — see "Step 1.5" below
 outputPath:        absolute path where plan.json must be written
 ```
 
@@ -29,6 +30,58 @@ outputPath:        absolute path where plan.json must be written
 - Read `specPath` fully.
 - For each path in `specAttachments`: Read it. If image, describe what you see (layout, fields, buttons, copy). If PDF >10 pages, use `pages: "1-10"`.
 - For each `*.md` under `claudeContextDir`: Read it. Pay particular attention to `business-rules.md` and `integration-flow.md` — these tell you the project's domain vocabulary and API patterns.
+
+## Step 1.5 — Read prototype snapshots (v0.5.0)
+
+For each entry in `prototypes[]` where `status === 'inspected'`:
+
+1. Read the snapshot JSON at `{planDir}/{prototype.snapshotPath}`. The snapshot is Chrome DevTools' `take_snapshot` output — a flat tree of UI nodes with `uid`, `role`, `name` (visible text), and structural children.
+2. (Optional) Look at the screenshot PNG at `{prototype.screenshotPath}` for visual context if available.
+3. Extract these UI signals — they augment what spec prose says but may not have called out:
+
+   | Signal | What to capture |
+   |---|---|
+   | **Section structure** | Top-level visible groups → maps to `plan.screens[*].sections[*]` |
+   | **Buttons / CTAs** | Every clickable element with a label → action ids in `sections[*].actions[]` and `state.actions[]` (UI-kind action — e.g. `openCancelDialog`, `toggleSection`) |
+   | **Form fields** | Every input/select/textarea visible → `sections[*].fields[*]` with detected `type` (text/select/etc) |
+   | **Table columns** | Every column header visible → `sections[*].columns[*]` |
+   | **Modal triggers** | Buttons that open modals (often labelled "Configure", "Edit", "View Details", "View History") → action with `dispatches: 'open<X>Dialog'` |
+   | **Tab labels** | Multi-tab containers (e.g. "Booking / Stay / Combined") → suggest sub-sections or feature components |
+   | **Status badges** | Pill/badge elements showing state → suggest `*StatusBadge` feature components |
+   | **Data display patterns** | Visible row count, default sort order, empty-state messages |
+
+4. Merge prototype findings WITH spec text. **Don't replace spec — augment.** Where spec is vague ("a list of bookings") but prototype shows 6 specific columns, include those 6 columns in `sections[*].columns[*]`.
+
+5. If snapshot has secondary snapshots (`-tab-<label>.json`), each represents a different tab/view. Generate sub-sections from each.
+
+### When prototype contradicts spec
+
+If prototype shows a UI pattern that **contradicts** spec or **project convention** (e.g. spec says "use existing modal pattern" but prototype shows a drawer slide-in), DO NOT silently adopt the prototype. Instead:
+
+- Add to `openQuestions[]`:
+  ```
+  q-NN: blocks=codegen — Prototype at <url> shows <pattern> (e.g. "slide-in drawer with 70vw width and color-coded mode tabs"). Spec says <other> or is silent. Project convention from claude-context/coding-style.md uses <existing pattern>. Confirm before codegen: which pattern wins?
+  ```
+- Mark the affected section/action with `prototypeRef: "{url}#<element-id-or-path>"` so the dev can locate it in the prototype.
+
+### Severity classification for deviations
+
+When you find a UI element in the prototype that doesn't have a matching shared component in `catalog.shared[*]`:
+
+- **critical** — totally unknown pattern (custom canvas, exotic interaction, layered animation). Flag with priority. Example: CrossRefMatrix with live recompute on cell click.
+- **warning** — similar component exists but inputs/outputs differ significantly. Example: prototype has a date range picker but with month-year-only granularity, while catalog has `app-calendar` with full date.
+- **info** — copy/label difference only. Doesn't block codegen.
+
+Add a `deviations[]` array to plan top-level (allowed by schema if you extend it — for now put in `openQuestions[]`):
+
+```
+q-NN: blocks=nothing (info) — Prototype label says "Apply All" but catalog convention uses "Apply to all".
+q-NN: blocks=codegen (critical) — Prototype shows CrossRefMatrix component (custom 5×5 grid with live recompute on cell click). No equivalent in catalog.shared. Confirm: create feature-local UsCompVcommCrossRefMatrixComponent?
+```
+
+### When `prototypes[]` is empty or no `inspected` entries
+
+Skip Step 1.5 entirely. Build plan from spec + claude-context only.
 
 ## Step 2 — Identify the feature shape
 

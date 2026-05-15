@@ -104,6 +104,169 @@ For each remaining token in `$ARGUMENTS`:
 Look for `{projectRoot}/claude-context/`. If present, capture `claudeContextDir = {projectRoot}/claude-context`. If absent, set null and warn:
 > "No `claude-context/` folder found. Plan will not honor project-specific business rules. Strongly recommended: create claude-context/business-rules.md, claude-context/coding-style.md, etc. — see oh-admin for the template."
 
+## Step 5.5 — Detect UI prototype references (v0.5.0)
+
+Spec text often points at a runnable prototype (`prototype.html`, `tracy-tramtran.github.io/...`, CodeSandbox link, raw TSX file). The plugin can fetch and snapshot these via Chrome DevTools MCP so spec-analyzer has actual UI signal to plan from — not just spec prose.
+
+Run the detector against all known spec inputs:
+
+```bash
+# Build the input list:
+#   - bundle.md (always present for Jira; written by Step 3 Case B)
+#   - specPath (for local file source)
+#   - every entry in specAttachments[] that is a readable text file (.md/.txt)
+node {pluginRoot}/scripts/detect-prototype.mjs \
+  --project-root "{projectRoot}" \
+  --in-file "{specPath}" \
+  --in-file "{each specAttachments[i] that is text}" \
+  > /tmp/aad-protos-{feature}.json
+```
+
+Parse the output JSON:
+
+```json
+{
+  "prototypes": [
+    { "kind": "github-io", "source": "https://.../...", "confidence": "high",
+      "contextLine": "...", "lineNumber": 6, "sourceFile": "...", "hostHint": "..." }
+  ],
+  "warnings": [...]
+}
+```
+
+### If `prototypes.length === 0`
+
+Skip Step 5.6. Continue with Step 6 (spec-analyzer with no prototype data).
+
+### If `prototypes.length > 0`
+
+Cap at 5 (most relevant). If detector found more, surface this:
+
+> "Detector found {N} prototype references; plugin will offer to inspect the top 5 by confidence. Pick which 5, or accept the default sort?"
+
+Show the user the detected list with confidence + context:
+
+```
+🔍 Detected {N} prototype reference(s) in spec:
+
+  [1] https://tracy-tramtran.github.io/vcomm-rate-adjustment/  (HIGH)
+      from: bundle.md:6 — "Prototype: https://..."
+  [2] remixed-ca0f0e7d.tsx  (LOW, bare filename)
+      from: vcomm-rate-adjustment-spec.md:11 — "Prototype simulator v2 (\`remixed-...\`)"
+```
+
+Use `AskUserQuestion`:
+
+> "Inspect prototypes via Chrome DevTools MCP before building the plan?"
+> Options:
+> - "Yes — inspect all high-confidence detections" (Recommended)
+> - "Yes — let me pick which to inspect"
+> - "Skip prototype inspection — proceed with spec-only plan"
+
+If user picks "let me pick", show another multi-select `AskUserQuestion` with each prototype as an option.
+
+Mark every prototype in the plan with `status` field:
+- `user-confirmed` — user said "inspect this"
+- `user-skipped` — user said skip
+- low-confidence prototypes NOT in user's pick → `user-skipped`
+
+## Step 5.6 — Inspect prototypes via Chrome DevTools MCP (v0.5.0)
+
+For each prototype with `status === 'user-confirmed'`, the skill itself invokes Chrome MCP tools (NOT a subagent — keeps tool access at skill level).
+
+### Important constraints (v0.5.0 — verified at implementation)
+
+1. **MCP file path constraint**: `mcp__chrome-devtools__take_snapshot` and `mcp__chrome-devtools__take_screenshot` ONLY accept paths within registered workspace roots. They will reject paths outside (e.g. arbitrary project directory). **Workaround**: save to system temp dir (always accessible) then `cp` to final location.
+
+2. **Snapshot output is `.txt`, not `.json`**: `take_snapshot` writes a plain-text accessibility tree (lines like `uid=X_Y RootWebArea ...`). It is human-readable. Do NOT expect JSON.
+
+3. **SPA prototypes need walking**: many prototypes load to a list/entry view. To capture the deep screen (modal, drawer, detail), the skill must click entry-point buttons after initial snapshot.
+
+### Workflow
+
+```
+snapshotDir = {planDir}/.spec/prototype-snapshots
+tempDir = system temp (e.g. C:\Users\<u>\AppData\Local\Temp on Windows, /tmp on POSIX)
+
+Bash: mkdir -p {snapshotDir}
+```
+
+For each confirmed prototype, in serial:
+
+```
+i = 1-based prototype index
+
+# 1. Open the prototype in a new page
+mcp__chrome-devtools__new_page(url: "<source>")
+
+# 2. Wait for SPA to render — use a text hint specific to the feature
+#    For ELS-1313 vcomm: wait_for(text: ["Override", "Mode", "Trader"])
+#    (Use text/labels mentioned in spec attachments as proxy for "loaded")
+mcp__chrome-devtools__wait_for(text: [<2-3 expected labels from spec>])
+
+# 3. Initial snapshot (entry view)
+mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-entry.txt")
+mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-entry.png", fullPage: true)
+
+# 4. Identify entry-point button — scan snapshot text for buttons matching:
+#    - "Open", "Edit", "Configure", "Details", "View", "Configure Override"
+#    The first matching uid is the entry point. If multiple, prefer the one
+#    whose surrounding text best matches the feature name from spec.
+
+# 5. Click entry point and take secondary snapshot (drawer/modal view)
+mcp__chrome-devtools__click(uid: <entry-button-uid>, includeSnapshot: true)
+# If snapshot in click response is enough, skip the next 2 calls. Else:
+mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-drawer.txt")
+mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-drawer.png", fullPage: true)
+
+# 6. (Optional, v0.5.0 deferred to v0.6.0) Click through visible mode tabs
+#    if drawer has them. For each tab role with `selectable=true`:
+#       mcp__chrome-devtools__click(uid) → wait_for → snapshot/screenshot
+#    Cap at 5 secondary captures total per prototype.
+
+# 7. Close page
+mcp__chrome-devtools__list_pages()  # to get the pageId
+mcp__chrome-devtools__close_page(pageId: <prototype-page-id>)
+
+# 8. Move files from tempDir to snapshotDir
+Bash: cp {tempDir}/aad-proto-{i}-entry.{txt,png} {snapshotDir}/{i}-{kind}-entry.{txt,png}
+Bash: cp {tempDir}/aad-proto-{i}-drawer.{txt,png} {snapshotDir}/{i}-{kind}-drawer.{txt,png}
+Bash: rm {tempDir}/aad-proto-{i}-*.{txt,png}
+```
+
+Snapshot filenames produced (all relative to planDir):
+- `.spec/prototype-snapshots/{i}-{kind}-entry.txt` — accessibility tree of initial view
+- `.spec/prototype-snapshots/{i}-{kind}-entry.png` — screenshot of initial view
+- `.spec/prototype-snapshots/{i}-{kind}-drawer.txt` — after first entry click (if applicable)
+- `.spec/prototype-snapshots/{i}-{kind}-drawer.png` — screenshot after click
+
+Each prototype's plan entry gets:
+- `inspectedAt`: ISO timestamp
+- `snapshotPath`: `.spec/prototype-snapshots/{i}-{kind}.json` (relative to planDir)
+- `screenshotPath`: `.spec/prototype-snapshots/{i}-{kind}.png`
+- `status: 'inspected'`
+
+### Skip-on-error (mandatory)
+
+If ANY MCP call fails (`mcp__chrome-devtools__*` raises error, timeout, network down, MCP not available):
+- Log the error message to `plan.stats.warnings[]`
+- Set `status: 'inspection-failed'`
+- Set `inspectionError: <error message>`
+- Continue with next prototype (do NOT abort the whole plan)
+
+If MCP isn't connected at all (first call raises "MCP server not available"), warn ONCE and set all remaining prototypes to `inspection-failed`:
+
+> "⚠ Chrome DevTools MCP not connected. Skipping prototype inspection for all {N} prototypes. Install or connect MCP if you want to use this feature: https://github.com/.../chrome-devtools-mcp"
+
+Continue with spec-only flow.
+
+### Bare filename (low-confidence) handling
+
+For prototypes with `kind: 'local-react'` AND `confidence: 'low'` (bare filename like `remixed-ca0f0e7d.tsx`):
+- The path likely doesn't exist on disk — `note: 'bare filename...'` will be set.
+- Skip Chrome inspection. Instead, set `status: 'user-skipped'` and add an open question to the plan:
+  - `q-NN: Spec references prototype file '<filename>' but location unknown. Provide an absolute path or URL if you want it inspected.`
+
 ## Step 6 — Run spec-analyzer agent
 
 Use the `Task` tool to launch the **spec-analyzer** subagent with:
@@ -119,8 +282,11 @@ specPath:          {specPath}
 specAttachments:   {specAttachments}
 claudeContextDir:  {claudeContextDir or null}
 catalogPath:       {projectRoot}/{catalog.path}
+prototypes:        {array of prototype objects from Step 5.5/5.6, including any with status=inspected — agent reads snapshotPath JSON}
 outputPath:        {planDir}/plan.json
 ```
+
+The agent reads `prototypes[*].snapshotPath` (when status === 'inspected') to augment its plan with observed UI patterns. Final plan.spec.prototypes[] must match the array passed in (including inspected metadata).
 
 Wait for the agent. It writes `plan.json` and `plan.md` and returns a one-line summary.
 
