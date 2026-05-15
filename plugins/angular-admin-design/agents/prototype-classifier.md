@@ -148,6 +148,59 @@ For high-volume info-level matches (e.g. 30 buttons all matching kendo-button), 
 }
 ```
 
+### v0.7.0 — Group deviations by route (multi-screen prototypes)
+
+When snapshot filenames contain `-route-{slug}-` (output by /aad-plan v0.7.0 multi-route walking), extract the route slug from each snapshot path:
+
+```
+.spec/prototype-snapshots/1-github-io-route-bookings-entry.txt  → route=bookings
+.spec/prototype-snapshots/1-github-io-route-bookings-walk-1-tab-Active.txt  → route=bookings
+.spec/prototype-snapshots/1-github-io-route-clients-entry.txt  → route=clients
+.spec/prototype-snapshots/1-github-io-route-clients-walk-1-modal-Edit.txt  → route=clients
+```
+
+Add `route` field to each deviation entry:
+
+```json
+{
+  "id": "dev-NN",
+  "route": "bookings",
+  ...
+}
+```
+
+And add a `byRoute` index at deviations.json top-level:
+
+```json
+{
+  "stats": { ... },
+  "byRoute": {
+    "bookings": ["dev-01", "dev-04", "dev-07"],
+    "clients": ["dev-02", "dev-05"],
+    "_default": ["dev-03", "dev-06"]    // snapshots without -route- prefix
+  },
+  "deviations": [ ... ]
+}
+```
+
+The `_default` key holds deviations from snapshots without route prefix (legacy v0.5.0/v0.6.0 snapshots, or single-screen prototypes that didn't go through multi-route walking).
+
+Cross-route shared patterns (same element role + label appearing in multiple routes) should be flagged with severity downgraded to `info` and `category: 'shared-pattern'`:
+
+```json
+{
+  "id": "dev-NN",
+  "severity": "info",
+  "category": "shared-pattern",
+  "elementRole": "button",
+  "elementLabel": "Save",
+  "occursInRoutes": ["bookings", "clients", "vendor"],
+  "message": "Standard 'Save' button reused across 3 screens — confirms shared button pattern."
+}
+```
+
+This helps spec-analyzer + reuse-mapper recognize legitimate shared patterns that don't need per-screen treatment.
+
 ## Step 5 — Severity counting & rollup
 
 After processing, output stats:
