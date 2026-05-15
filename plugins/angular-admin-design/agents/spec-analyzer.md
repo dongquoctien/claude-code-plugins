@@ -212,6 +212,50 @@ If both `sourceFindingsPath` AND `snapshotPath` exist for the same prototype:
 
 Add summary note to plan: `"Plan augmented from prototype source code: {N} handlers → actions, {M} state hooks → state fields, {K} endpoints discovered."`
 
+## Step 1.9 — Read prototype text + color extracts (v1.0.0)
+
+For each prototype with text findings at `{planDir}/.spec/prototype-text-{i}.json` (produced by `/aad-plan` Step 5.6.3), read and consume:
+
+```json
+{
+  "textStrings": [
+    { "text": "Save Changes", "role": "button", "context": "dialog > drawer",
+      "suggestedI18nKey": "usCompVcommOverride.dialog.save_changes", "source": "...", "line": 145 }
+  ],
+  "colorHints": [
+    { "color": "#6366f1", "kind": "bg", "context": "tab indigo", "source": "...", "line": 123 }
+  ]
+}
+```
+
+### textStrings → plan.i18n.keys[]
+
+For each text:
+- If `suggestedI18nKey` not already in `plan.i18n.keys[]`, propose new entry:
+  ```json
+  { "key": "<suggestedI18nKey>", "default": "<text>", "context": "<role> in <context>" }
+  ```
+- Don't duplicate keys spec-analyzer already proposed from spec text
+- Match against existing keys (Levenshtein on default value); if matches existing key, just note it (verifies key already covers the prototype label)
+
+Cap at 80 keys per prototype to prevent token blowup on noisy snapshots.
+
+Note in plan.summary: `"Auto-suggested {N} i18n keys from prototype text. Review plan.i18n.keys[] — labels coming from sidebar/banner may need pruning."`
+
+### colorHints → openQuestions (info severity)
+
+For each hex/rgb color not in `#000`/`#fff` family:
+- Note in plan.openQuestions[] with severity info:
+  ```
+  q-NN: blocks=nothing — Prototype uses color `#6366f1` (indigo, kind=bg) in {context}. Cross-reference with project design tokens (claude-context/coding-style.md or shared/scss/_variables.scss) before applying. May indicate mode-color convention not in catalog.
+  ```
+
+Don't try to match against catalog automatically — color resolution requires design token doc which v1.0.0 doesn't parse. v1.1+ may add design-token comparison.
+
+### Known limitation
+
+Text extraction can capture chrome elements (sidebar nav, banner buttons) when the snapshot includes those regions. spec-analyzer should manually review the proposed keys list and prune obvious noise like "Logout", "Hotel Bookings" (when those are not part of the feature being planned).
+
 ## Step 2 — Identify the feature shape
 
 From the spec, extract:

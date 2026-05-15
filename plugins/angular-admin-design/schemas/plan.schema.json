@@ -84,6 +84,10 @@
                 "type": "string",
                 "description": "(v0.8.0) Path (relative to planDir) to parse-prototype-source.mjs JSON output. Set when prototype is local .tsx/.jsx/.html and source was statically parsed."
               },
+              "textFindingsPath": {
+                "type": "string",
+                "description": "(v1.0.0) Path (relative to planDir) to extract-prototype-text.mjs JSON output with textStrings[] (i18n key suggestions) + colorHints[]."
+              },
               "secondarySnapshots": {
                 "type": "array",
                 "description": "Additional snapshots captured by walking the prototype (e.g. after clicking entry-point button to reveal drawer/modal). Each is { label, snapshotPath, screenshotPath }.",

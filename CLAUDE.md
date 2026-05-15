@@ -30,43 +30,81 @@ When adding a new plugin: create `plugins/<name>/.claude-plugin/plugin.json` AND
 
 ## angular-admin-design architecture
 
-A dev-facing **spec-driven codegen pipeline** for Angular admin features. Four-stage pipeline anchored by a single planning step:
+A dev-facing **spec-driven codegen pipeline** for Angular admin features. v1.0.0 production-ready, 8 skills, supports prototype inspection via Playwright/Chrome DevTools MCP.
 
 ```
-spec.md/Jira  →  aad-plan       →  plan.json + reuse-map.json + open-questions
-                                       │
-                 aad-generate    →  routes/<feature>/*.ts  (NgRx feature module)
-                                       │
-                 aad-mock        →  MockXxxService + fixtures behind InjectionToken
-                                       │
-                 aad-switch      →  environment.mockMode flip (real ↔ mock)
+spec.md/Jira (+ prototype URL) ──► aad-plan ──► plan.json + reuse-map.json + STATUS.md
+                                          │
+                                     aad-generate ──► routes/<feature>/*.ts (NgRx)
+                                          │
+                                     aad-verify ──► tsc --noEmit + auto-fix
+                                          │
+                                     aad-mock ──► MockXxxService behind InjectionToken
+                                          │
+                                     aad-switch ──► environment.mockMode flip
 ```
 
-The plugin's core insight: **planning runs once, deterministically**. Once `plan.json` + `reuse-map.json` exist for a feature, codegen has no creative freedom about which shared modules to import, mock-gen has no freedom about which endpoints exist. Re-runs produce the same output regardless of phrasing — solves the "five prompts → five layouts" pain.
+The plugin's core insight: **planning runs once, deterministically**. Once `plan.json` + `reuse-map.json` exist, codegen has no creative freedom about which shared modules to import. Re-runs produce the same output. Solves "five prompts → five layouts".
 
 ### Skill orchestration
 
-| Skill | Agent | Reads / writes |
+| Skill | Agent(s) | Reads / writes |
 |---|---|---|
-| `aad-init` | — | `.claude/angular-admin-design.json` (detect Angular/Kendo/NgRx versions, paths, domain prefixes, i18n flow) |
-| `aad-index` | `source-indexer` | `.claude/angular-admin-design/component-catalog.json` (crawl shared/modules + routes/ + I-interfaces + Kendo) |
-| `aad-plan` | `spec-analyzer` then `reuse-mapper` | reads spec local OR via `mcp-atlassian` Jira; writes `{outputDir}/{feature}/{plan,reuse-map}.{md,json}` + timeline |
-| `aad-generate` | `code-generator` | Hybrid per-file confirm. Writes to `routes/<feature>/` mandatory NgRx layout |
-| `aad-mock` | `mock-generator` | Service interface + InjectionToken + Mock class + fixtures (captured or AI-synthetic with `_synthetic: true` flag); edits module providers + effects @Inject |
+| `aad-init` | — | `.claude/angular-admin-design.json` (profile detection) |
+| `aad-index` | `source-indexer` | `.claude/angular-admin-design/component-catalog.json` (v2 — adds coreServices, dependencies, precise input types via TS Compiler API) + `reference-features.json` (v0.2.0 — verbatim source of 3 anchor features) |
+| `aad-plan` | `spec-analyzer` → `reuse-mapper` (+ optional `prototype-classifier`) | Reads spec local OR Jira via `mcp-atlassian`. Multi-step: resolve spec → detect prototype → inspect via Playwright/Chrome DevTools → walk → classify → plan/reuse-map. Writes `{outputDir}/{feature}/{plan,reuse-map}.{md,json}` + state to `{stateDir}/{feature}/` |
+| `aad-generate` | `code-generator` | Hybrid per-file confirm. Contract-validation gate before every Write. Section splitting when >3 fields. Routes/<feature>/ mandatory NgRx layout |
+| `aad-verify` | `error-fixer` (inline) | Runs `tsc --noEmit -p tsconfig.app.json`, classifies errors, suggests auto-fixes. Optional `--build-check` runs `ng build` |
+| `aad-mock` | `mock-generator` | Service interface + InjectionToken + Mock class + fixtures (priority: captured > prototype-captured > synthetic). Edits providers + effects @Inject. Adds `mockMode` to all env files |
 | `aad-switch` | (inline) | `mock-switch.mjs` edits `environment.*.ts` `mockMode` field — refuses prod without `--force` |
 | `aad-status` | — | Read-only wrapper over `timeline.mjs` |
 
-### Key invariants
+### Key invariants (load-bearing, don't drift)
 
-- **NgRx is mandatory** — every generated feature has `actions/ reducers/ effects/ services/ components/ containers/ models/` per `knowledge/ngrx-feature-store.md`. `StoreModule.forFeature` and `EffectsModule.forFeature` are always wired.
-- **Project's `claude-context/*.md` is input** — `spec-analyzer` reads `business-rules.md` and `integration-flow.md` so the generated plan honors project rules (status codes, succeedYn envelope, role guards) without dev re-stating them.
-- **Two-level featureKey** — outer `<feature>` for module slice, inner `<feature>List`/`Form`/`Detail` for sub-reducer. The `reducers/index.ts` wrapper pattern is non-negotiable; flatten and `bs-event`-style code breaks.
-- **`environment.prod.ts` is protected** — `mock-switch.mjs` refuses to write to it unless `--force` is passed.
-- **Knowledge files in `knowledge/` are Angular 9 + Kendo 4.7 specific.** No standalone components, no `inject()` function, no Signals — these are the wrong defaults for the target codebases.
+- **NgRx mandatory** — every generated feature has `actions/ reducers/ effects/ services/ components/ containers/ models/`. `StoreModule.forFeature` + `EffectsModule.forFeature` always wired.
+- **Two-level featureKey** — outer `<feature>` (module slice), inner `<feature>List` / `Form` / `Detail` (sub-reducer). `reducers/index.ts` wrapper non-negotiable.
+- **Project's `claude-context/*.md` is input** — spec-analyzer reads `business-rules.md` + `integration-flow.md` so generated plan honors project conventions (succeedYn envelope, role guards, etc.) without dev re-stating them.
+- **Catalog is source of truth for reuse** — generated code must consult `catalog.shared[*].inputs` for binding types; contract-validator catches mismatches. v0.2.0 lesson: knowledge files are reference, NOT prescriptive (don't list components by name — point at catalog).
+- **`environment.prod.ts` is protected** — `mock-switch.mjs` refuses to write unless `--force`.
+- **Knowledge files are Angular 9 + Kendo 4.7 specific.** No standalone components, no `inject()` function, no Signals — wrong defaults for target codebases.
+- **State / plan split (v0.4.0)** — plan artifacts in `docs/aad/<feature>/` (committed), state (.timeline.json + STATUS.md) in `.claude/aad/<feature>/` (gitignored).
 
-### Per-feature state — timeline contract
+### Per-feature state contract
 
-Same pattern as feature-mockup: every skill that mutates a feature's state ends by appending to `{featureDir}/.timeline.json` via `scripts/timeline.mjs`. Phase derivation: `planned → generated → mocked → wired-real`. Open questions from the plan are tracked in `pending.openQuestions[]` and individual questions are resolved by event ID. See `plugins/angular-admin-design/docs/workflow.md` for full lifecycle.
+Every skill that mutates feature state appends to `.timeline.json` via `scripts/timeline.mjs`. Phase derivation: `planned → generated → verified → mocked → wired-real`. Open questions tracked in `pending.openQuestions[]`, resolved by event ID. See `plugins/angular-admin-design/docs/workflow.md`.
+
+### Prototype inspection (v0.5.0 → v1.0.0)
+
+When spec references a prototype URL or local file, `/aad-plan` Step 5.5-5.6 detects + offers to inspect:
+
+- **detect-prototype.mjs** scans Jira description / spec text / Jira attachments for URLs (github.io / netlify / surge / vercel / glitch / codesandbox / stackblitz) and local HTML/TSX paths with confidence scoring.
+- **detect-prototype-routes.mjs** (v0.7.0) finds sibling routes for multi-screen prototypes.
+- **walk-prototype.mjs** (v0.6.0) finds clickable candidates (tabs, modal triggers, accordions).
+- **MCP backend dispatch** (v0.7.1) — Playwright preferred for snapshot/walk; Chrome DevTools or Playwright for network capture. Detects available at runtime, graceful fallback.
+- **parse-prototype-source.mjs** (v0.8.0) — static TSX/JSX parse via TypeScript Compiler API for event handlers + useState + fetch URLs that browser DOM misses.
+- **extract-prototype-text.mjs** (v1.0.0) — text + color hints → auto-suggest i18n keys + flag design-token drift.
+- **prototype-classifier agent** (v0.6.0) — compares every UI element vs catalog, outputs `deviations.json` with severity. User resolves critical via AskUserQuestion.
+
+### Lessons from v0.1.0 → v1.0.0 (for future contributors)
+
+1. **First version's knowledge was wrong**. v0.1.0 generated code with `_errorService.handleError()` (method invented), `import 'file-saver'` (not installed), `[pageable]="{object}"` (type is boolean). Fix: catalog crawl REAL services + reference features verbatim (v0.2.0).
+2. **Validator gate prevents most bugs**. v0.3.0 contract-validator caught all 8 v0.1.0 build-blockers via 9 rules. Adding new rules is the right place to extend.
+3. **MCP file path constraint** — Chrome DevTools + Playwright both reject paths outside workspace roots. Save to system temp first, then `Bash cp`.
+4. **Snapshot output format differs**: Chrome DevTools `take_snapshot` → `.txt`, Playwright `browser_snapshot` → `.md`. spec-analyzer reads both.
+5. **SPA prototypes need walking** — single snapshot of a feature URL often only shows the list view; the actual drawer/modal needs `click` then re-snapshot.
+6. **Static demo prototypes are common** — make 0 API calls (mock data inline). `/aad-mock` falls back to synthetic.
+7. **TypeScript Compiler API borrowed from project node_modules** — pattern used by crawl-shared-modules + parse-prototype-source. Always check `node_modules/typescript` first, fall back to regex.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Generated code has TS errors after `/aad-generate` | Knowledge files have wrong assumption OR catalog stale | Re-run `/aad-index`, run `/aad-verify` to surface specific errors with auto-fix |
+| Mock data shows same rows on every page | Mock service uses synthetic data without `_filterAndPage` | Re-run `/aad-mock`, check `mock-spec.json` for filter helper inclusion |
+| Prototype inspection skipped | MCP not connected OR file unreachable | See `plan.stats.warnings[]` for diagnostic; manually provide path |
+| Plan proposes weird shared component | Catalog parser missed an input type | Check `catalog.shared[*].inputs` for the component; verify TS Compiler API installed in target project |
+| `environment.mockMode` cast `as any` in generated code | aad-mock Step 9 didn't run on all env files | Re-run `/aad-mock` (idempotent on env files) |
+| Plan output too noisy with sidebar nav | Text extractor includes banner/sidebar | Review plan.i18n.keys[] manually, prune; or limit prototype walk scope |
 
 ## feature-mockup architecture
 

@@ -252,6 +252,41 @@ If user also picks browser inspect, run BOTH — source parse first (cheap), the
 
 **HTML prototypes**: source parser handles `<form action>`, `<a href>`, inline `onclick="..."` attributes via regex. Less rich than TSX but useful for static demos.
 
+### Step 5.6.3 — Extract text + colors from snapshots (v1.0.0)
+
+After all snapshots captured (entry + drawer + walk snapshots + multi-route snapshots), automatically run text extraction on each. No user prompt — this is post-processing value-add.
+
+For each prototype with `status === 'inspected'`:
+
+```bash
+# Gather all snapshot files for this prototype
+snapshotFiles = [
+  prototype.snapshotPath (absolute),
+  ...prototype.secondarySnapshots[*].snapshotPath (absolute)
+]
+
+# Run extractor — accepts multiple --in args
+node {pluginRoot}/scripts/extract-prototype-text.mjs \
+  --feature {feature} \
+  --in {snapshotFile1} \
+  --in {snapshotFile2} \
+  ... \
+  > {planDir}/.spec/prototype-text-{i}.json
+```
+
+Set `plan.spec.prototypes[i].textFindingsPath = ".spec/prototype-text-{i}.json"`.
+
+spec-analyzer Step 1.9 (v1.0.0) reads this file to:
+- Auto-suggest i18n keys per text string
+- Flag color hints (hex/rgb) as info-severity openQuestions for design-token review
+
+No user prompt at this step — extraction is fast and side-effect-free. Add the count to the final report:
+
+```
+Captured 240 text strings + 5 color hints from 3 snapshots → {planDir}/.spec/prototype-text-1.json
+spec-analyzer will propose ~80 i18n keys (capped) — review plan.i18n.keys[] for noise.
+```
+
 ### Workflow
 
 ```
