@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "projectRoot", "indexedAt", "shared", "features", "models", "kendo"],
   "properties": {
-    "version": { "const": 1 },
+    "version": { "type": "integer", "minimum": 1, "maximum": 2 },
     "projectRoot": { "type": "string" },
     "indexedAt": { "type": "string", "format": "date-time" },
     "stats": {
@@ -41,9 +41,14 @@
               "required": ["name"],
               "properties": {
                 "name": { "type": "string" },
-                "type": { "type": "string" },
+                "type": { "type": ["string", "null"] },
                 "required": { "type": "boolean" },
-                "kind": { "enum": ["field", "getter-setter"] }
+                "kind": { "enum": ["field", "getter", "setter", "getter-setter"] },
+                "defaultValue": { "type": ["string", "null"] },
+                "isTemplateRef": { "type": "boolean" },
+                "isObservable": { "type": "boolean" },
+                "isInjectionToken": { "type": "boolean" },
+                "isEventEmitter": { "type": "boolean" }
               }
             }
           },
@@ -135,6 +140,71 @@
           "items": { "type": "string" },
           "description": "Detected @progress/kendo-angular-* packages (e.g. grid, dropdowns, inputs)."
         }
+      }
+    },
+    "coreServices": {
+      "type": "array",
+      "description": "Public method surface of services under src/app/core/services/. /aad-generate cross-checks every `this.xxxService.method(...)` call site against this list. (v2)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["className", "path"],
+        "properties": {
+          "className": { "type": "string" },
+          "path": { "type": "string" },
+          "importPath": { "type": "string", "description": "Same as path with .ts stripped — ready to paste into an import statement." },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "kind"],
+              "properties": {
+                "name": { "type": "string" },
+                "kind": { "enum": ["method", "getter", "setter"] },
+                "isAsync": { "type": "boolean" },
+                "isStatic": { "type": "boolean" },
+                "params": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "type": { "type": ["string", "null"] },
+                      "optional": { "type": "boolean" },
+                      "defaultValue": { "type": ["string", "null"] }
+                    }
+                  }
+                },
+                "returnType": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "Project dependency catalog. /aad-generate refuses to emit `import 'x'` unless x ∈ installed. (v2)",
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["version", "kind"],
+            "properties": {
+              "version": { "type": "string" },
+              "kind": { "enum": ["dep", "dev"] }
+            }
+          }
+        },
+        "installed": { "type": "array", "items": { "type": "string" } },
+        "missingFromLockfile": { "type": "array", "items": { "type": "string" } },
+        "nodeModulesExists": { "type": "boolean" }
       }
     }
   }
