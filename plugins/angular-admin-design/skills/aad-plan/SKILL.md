@@ -219,10 +219,62 @@ mcp__chrome-devtools__click(uid: <entry-button-uid>, includeSnapshot: true)
 mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-drawer.txt")
 mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-drawer.png", fullPage: true)
 
-# 6. (Optional, v0.5.0 deferred to v0.6.0) Click through visible mode tabs
-#    if drawer has them. For each tab role with `selectable=true`:
-#       mcp__chrome-devtools__click(uid) → wait_for → snapshot/screenshot
-#    Cap at 5 secondary captures total per prototype.
+# 6. Auto-walk loop (v0.6.0)
+#    Run walk-prototype.mjs on the drawer snapshot to find walk candidates
+#    (tabs, modal triggers, accordions, dropdowns). Click each in priority
+#    order, snapshot after each. Cap at WALK_BUDGET (default 5).
+Bash:
+  node {pluginRoot}/scripts/walk-prototype.mjs \
+    --in-file "{tempDir}/aad-proto-{i}-drawer.txt" \
+    --budget 5 \
+    --exclude-uid <entry-button-uid>      # already clicked
+    --exclude-context "sidebar"           # avoid nav clicks
+    --exclude-context "Hotel Bookings"
+
+# Parse the JSON output. For each candidate:
+for j in 0..min(5, candidates.length):
+  cand = candidates[j]
+
+  # Click the candidate. includeSnapshot:true saves a separate take_snapshot call.
+  mcp__chrome-devtools__click(uid: cand.uid, includeSnapshot: true)
+
+  # Wait for new content to render. For tabs, look for tab-specific text from spec;
+  # for modals, look for common modal labels ("Cancel", "Close", "Save").
+  mcp__chrome-devtools__wait_for(text: <heuristic from cand.label + spec>)
+
+  # Save snapshot + screenshot to temp
+  label = cand.kind + '-' + slugify(cand.label).slice(0, 40)
+  mcp__chrome-devtools__take_snapshot(filePath: "{tempDir}/aad-proto-{i}-walk-{j+1}-{label}.txt")
+  mcp__chrome-devtools__take_screenshot(filePath: "{tempDir}/aad-proto-{i}-walk-{j+1}-{label}.png", fullPage: true)
+
+  # Add to prototype's secondarySnapshots[] array
+  prototype.secondarySnapshots.push({
+    label,
+    snapshotPath: ".spec/prototype-snapshots/{i}-{kind}-walk-{j+1}-{label}.txt",
+    screenshotPath: ".spec/prototype-snapshots/{i}-{kind}-walk-{j+1}-{label}.png",
+    candidateKind: cand.kind,
+    candidateLabel: cand.label,
+  })
+
+  # Return to base state before next walk (so each walk starts fresh from drawer)
+  # Strategy 1: if cand was a modal-trigger and the page now shows a modal,
+  #             look for "Close" / "Cancel" / "X" button and click it
+  # Strategy 2: if cand was a tab, no return needed — tabs are non-destructive
+  # Strategy 3: if cand was an accordion, no return needed
+  # Strategy 4 (fallback): mcp__chrome-devtools__navigate_page(reload) + re-do entry walk
+
+  if cand.kind === 'modal-trigger':
+    # Try to close the modal — scan latest snapshot for close button
+    close_button = find_button_by_label(["Close", "Cancel", "X", "✕"])
+    if close_button:
+      mcp__chrome-devtools__click(uid: close_button.uid)
+      mcp__chrome-devtools__wait_for(text: <drawer hint>)
+    else:
+      # Last resort: reload + re-do entry click
+      mcp__chrome-devtools__navigate_page(type: 'reload')
+      mcp__chrome-devtools__wait_for(text: [<labels>])
+      mcp__chrome-devtools__click(uid: <entry-button-uid>)
+      mcp__chrome-devtools__click(uid: <drawer-trigger-uid>)
 
 # 7. Close page
 mcp__chrome-devtools__list_pages()  # to get the pageId
@@ -231,6 +283,7 @@ mcp__chrome-devtools__close_page(pageId: <prototype-page-id>)
 # 8. Move files from tempDir to snapshotDir
 Bash: cp {tempDir}/aad-proto-{i}-entry.{txt,png} {snapshotDir}/{i}-{kind}-entry.{txt,png}
 Bash: cp {tempDir}/aad-proto-{i}-drawer.{txt,png} {snapshotDir}/{i}-{kind}-drawer.{txt,png}
+Bash: cp {tempDir}/aad-proto-{i}-walk-*.{txt,png} {snapshotDir}/
 Bash: rm {tempDir}/aad-proto-{i}-*.{txt,png}
 ```
 
@@ -266,6 +319,103 @@ For prototypes with `kind: 'local-react'` AND `confidence: 'low'` (bare filename
 - The path likely doesn't exist on disk — `note: 'bare filename...'` will be set.
 - Skip Chrome inspection. Instead, set `status: 'user-skipped'` and add an open question to the plan:
   - `q-NN: Spec references prototype file '<filename>' but location unknown. Provide an absolute path or URL if you want it inspected.`
+
+## Step 5.7 — Run prototype-classifier + resolve critical deviations (v0.6.0)
+
+After all confirmed prototypes inspected (with entry, drawer, and walk snapshots saved), the skill runs the **prototype-classifier** subagent to compare detected UI elements against `catalog.shared` and surface deviations.
+
+### Step 5.7a — Gather snapshot paths
+
+```
+snapshotPaths = []
+for each prototype in spec.prototypes[] with status === 'inspected':
+  add prototype.snapshotPath (absolute) to snapshotPaths
+  add prototype.screenshotPath
+  for each secondary in prototype.secondarySnapshots:
+    add secondary.snapshotPath (absolute) to snapshotPaths
+```
+
+If `snapshotPaths` is empty (no successful inspection), skip Step 5.7 entirely.
+
+### Step 5.7b — Launch prototype-classifier subagent
+
+Use the `Task` tool to launch:
+
+```
+agent:            prototype-classifier
+catalogPath:      {projectRoot}/{catalog.path}
+snapshotPaths:    {snapshotPaths absolute array}
+referencePath:    {projectRoot}/.claude/angular-admin-design/reference-features.json
+workingLanguage:  {workingLanguage}
+outputPath:       {planDir}/deviations.json
+```
+
+The agent returns a one-line summary including counts (critical / warning / info).
+
+### Step 5.7c — Read deviations.json
+
+```bash
+cat {planDir}/deviations.json | node -e "..."  # parse summary stats
+```
+
+Update each `prototype.deviations` field in plan.spec.prototypes[]:
+
+```json
+{
+  ...,
+  "deviations": {
+    "critical": <n>,
+    "warning": <n>,
+    "info": <n>
+  }
+}
+```
+
+### Step 5.7d — Surface critical deviations to user (max 5 batched)
+
+If `critical > 0`, take the top 5 (by appearance order) and ask user via `AskUserQuestion`:
+
+For each critical deviation, present:
+
+```
+[1/N] Critical UI deviation detected
+
+Element: {elementRole} "{elementLabel}"
+From:    {prototypePath}
+Context: {parentContext}
+
+Message: {message}
+
+Suggested: {suggestedAction}
+```
+
+`AskUserQuestion` (per critical, max 4 options + free-text for custom):
+> "How should this deviation be resolved?"
+> - "Accept as feature-component" (Recommended for bespoke UI) — adds new section/component to plan, will be created by /aad-generate
+> - "Use closest catalog match" — uses `catalogMatch.candidate`, may need adapter
+> - "Add to openQuestions for dev to decide" — defers — plan continues but section marked TODO
+> - "Skip — not relevant to feature" — removed from consideration
+
+For each user answer, augment `deviations.json` with:
+```json
+{
+  ...,
+  "userResolution": "accept-feature-component" | "use-catalog-match" | "add-openquestion" | "skip",
+  "userResolvedAt": "<ISO>",
+  "userNote": "<optional text>"
+}
+```
+
+### Step 5.7e — Batch over budget
+
+If `critical > 5`, ask the user FIRST batch (5), then ask "Continue with next batch of {N-5}?" Allow user to skip remaining batches (will be auto-added as openQuestions with severity note).
+
+### When prototype-classifier fails
+
+If the subagent reports error or no deviations file written:
+- Log to `plan.stats.warnings[]`
+- Set `prototype.classifierFailed: true` for affected entries
+- Continue — spec-analyzer just won't have deviation hints
 
 ## Step 6 — Run spec-analyzer agent
 
