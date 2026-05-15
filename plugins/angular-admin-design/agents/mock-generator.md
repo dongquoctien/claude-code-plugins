@@ -65,9 +65,23 @@ Before writing any fixture, build a temporary mock-spec object conforming to `mo
 For each endpoint:
 
 1. Compute `fixtureFile = mocks/<feature>/<endpoint.id>.json` (relative to projectRoot).
-2. Check `{projectRoot}/{fixtureFile}` exists.
-   - YES → `fixtureSource: 'captured'`
-   - NO  → `fixtureSource: 'synthetic'`
+2. Check sources in priority order:
+   a. **Captured fixture** at `{projectRoot}/{fixtureFile}` → `fixtureSource: 'captured'` (highest)
+   b. **(v0.7.1)** Prototype network capture: read `plan.endpoints[*].prototypeNetworkSource` field (populated by /aad-mock Step 1.6). If set, point to `{planDir}/<that path>`. Treat as `fixtureSource: 'prototype-captured'` — pre-recorded from prototype walk, real shape, real values.
+   c. **Synthetic fallback** → `fixtureSource: 'synthetic'` (lowest — AI generates data from interface)
+
+When using prototype-captured source:
+- Copy the file from `.spec/prototype-network/<file>.json` to `mocks/<feature>/<endpoint.id>.json` so subsequent runs see it as a regular captured fixture
+- Annotate with metadata block at top:
+  ```json
+  {
+    "_capturedFrom": "prototype",
+    "_prototypeUrl": "<source URL>",
+    "_capturedAt": "<ISO timestamp>",
+    ...actual response body...
+  }
+  ```
+- Mark in mock-spec entry: `fixtureSource: 'prototype-captured'`, `prototypeUrl: <source>`
 
 Build `responseShape` per endpoint by inspecting the real service implementation:
 - If the service does `if (res.succeedYn && res.result) return of(res.result.list)` → `{ wrapped: true, successFlagField: 'succeedYn', resultField: 'result', listField: 'list', totalField: 'totalCount' }`
