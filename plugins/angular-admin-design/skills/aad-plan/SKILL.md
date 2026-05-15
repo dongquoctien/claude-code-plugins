@@ -215,6 +215,43 @@ See `knowledge/mcp-browser-tools.md` for the per-task decision matrix.
 
 4. **Browser sessions don't share**: Playwright and Chrome DevTools run separate browser processes. If you navigate via Playwright then need Chrome DevTools network capture, you must RE-NAVIGATE Chrome DevTools to the same URL. Don't expect cross-backend page state.
 
+### Step 5.6.2 — Source parsing for local files (v0.8.0)
+
+When a prototype has `kind ∈ {'local-html', 'local-react', 'local-file'}` AND the source file is accessible on disk (confidence: high or medium per v0.8.0 detect-prototype upgrade), the skill can **parse the source code statically** instead of (or alongside) browser inspection.
+
+Why useful:
+- **Event handler names** — `onClick={handleSave}` reveals `handleSave` as a dispatched action name. Browser DOM only shows the rendered button.
+- **Initial state shape** — `useState({mode:'booking', rules:[]})` initial value maps directly to NgRx state shape.
+- **API URLs** — `fetch('/api/...')` and `axios.get('/api/...')` calls — helps populate plan.endpoints.
+- **Component composition** — JSX tree shows which sub-components compose the screen.
+
+For each local-file prototype with confidence ≥ medium:
+
+```
+AskUserQuestion:
+  question: "Local prototype source '{filename}' detected. How to inspect?"
+  options:
+    - "Source parse only" (Recommended for .tsx/.jsx; fastest, no browser)
+    - "Browser inspect (file://) + source parse" — both, takes longer
+    - "Browser only" — runtime DOM only
+    - "Skip"
+```
+
+If user picks source parse:
+
+```bash
+node {pluginRoot}/scripts/parse-prototype-source.mjs \
+  --in "{prototype.source}" \
+  --project-root "{projectRoot}" \
+  > "{planDir}/.spec/prototype-source-{i}.json"
+```
+
+Output JSON contains `events[]`, `state[]`, `endpoints[]`, `components[]`. Store path in `plan.spec.prototypes[i].sourceFindingsPath`.
+
+If user also picks browser inspect, run BOTH — source parse first (cheap), then browser inspect (with file:// URL). Findings from both feed into spec-analyzer separately.
+
+**HTML prototypes**: source parser handles `<form action>`, `<a href>`, inline `onclick="..."` attributes via regex. Less rich than TSX but useful for static demos.
+
 ### Workflow
 
 ```

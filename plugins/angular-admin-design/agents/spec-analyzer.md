@@ -158,6 +158,60 @@ For `deviations.byRoute._default` (snapshots without route prefix, or single-scr
 
 For `category: 'shared-pattern'` deviations (same element in multiple routes), don't inject into screens — instead, note in plan.summary as confirmation of project's existing shared component usage.
 
+## Step 1.8 — Read prototype source findings (v0.8.0)
+
+For each prototype with `sourceFindingsPath` set (populated by /aad-plan Step 5.6.2 source parsing), read `{planDir}/<sourceFindingsPath>`:
+
+```json
+{
+  "kind": "tsx",
+  "file": "...",
+  "events": [{ "handler": "handleSave", "element": "button", "eventName": "onClick", "line": 34 }],
+  "state": [{ "name": "mode", "setter": "setMode", "hookKind": "useState", "initial": "'booking'" }],
+  "endpoints": [{ "url": "/api/bookings/list", "method": "GET", "source": "axios.get" }],
+  "components": [{ "name": "Drawer", "props": ["open", "onClose"] }]
+}
+```
+
+Augment the plan:
+
+### events[] → state.actions[]
+
+For each event entry, propose a UI-kind NgRx action:
+- `handler: 'handleSave'` → action `saveDrawerStaging` (camelCase, descriptive)
+- `handler: 'handleCancel'` → action `discardDrawerStaging`
+- Don't duplicate if action already in spec-derived actions list
+
+### state[] → state.shape
+
+For each state hook entry, map to NgRx state shape field:
+- `useState('booking')` → `mode: 'booking' | 'stay' | 'combined'`  (infer enum from initial value and other useState calls)
+- `useState(false)` → `<name>: boolean`
+- `useReducer(reducer, [])` → `<name>: I<Name>[]` (array entity slot)
+
+Don't replace existing state fields from spec — augment only if not present.
+
+### endpoints[] → plan.endpoints[]
+
+For each URL hit in source:
+- Normalize path (replace `{contractId}` etc. with `:contractId` placeholders)
+- Match against existing `plan.endpoints[*]` by path similarity
+- If match: confirm method matches; add `prototypeSourceRef` to that endpoint
+- If no match: propose new endpoint entry with source: 'prototype-source-parse'
+
+### components[] → suggested sections
+
+For each top-level component name detected (uppercase JSX tag), check if it matches a section. If component is composed BY the main screen (not the main screen itself), suggest as a section.
+
+### Conflict detection between source and DOM
+
+If both `sourceFindingsPath` AND `snapshotPath` exist for the same prototype:
+- Compare button labels in DOM snapshot with handler names in source
+- If DOM has buttons not in source (or vice versa), flag as openQuestion (severity: warning)
+- Example: source has `handleArchive` handler but DOM doesn't show "Archive" button → component may be conditional, document for dev
+
+Add summary note to plan: `"Plan augmented from prototype source code: {N} handlers → actions, {M} state hooks → state fields, {K} endpoints discovered."`
+
 ## Step 2 — Identify the feature shape
 
 From the spec, extract:
