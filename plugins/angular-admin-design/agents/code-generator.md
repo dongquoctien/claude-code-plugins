@@ -478,7 +478,45 @@ Strings: if `i18nFlow !== 'none'`, use `{{ '<i18n key>' | translate }}`. Else in
 
 ### <feature>-routing.module.ts
 
-One Route per screen. Top-level route has `data: { title: '<plan.summary first sentence or feature display name>', store: '<featureCamel>' }`.
+One Route per screen. Top-level route has `data: { title: '<plan.summary first sentence or feature display name>' }`.
+
+**v0.4.0 rule for `data.store`:** Grep existing routing modules in the project before deciding whether to include `store: '<featureCamel>'`.
+
+```bash
+# Count routing modules with vs without data.store
+total=$(ls {projectRoot}/{routesPath}/*/[a-z]*-routing.module.ts 2>/dev/null | wc -l)
+with_store=$(grep -l "store:" {projectRoot}/{routesPath}/*/[a-z]*-routing.module.ts 2>/dev/null | wc -l)
+```
+
+If `with_store / total > 0.5` → INCLUDE `store: '<featureCamel>'`.
+Else → OMIT it. (Most projects don't actually use it; the `deleteMenuTabReducer` reads it for tab-cleanup but works fine when missing.)
+
+**oh-admin example**: 0/128 routing modules have `data.store` → OMIT. v0.1.0 generated it because the knowledge file said "always include" — that was wrong.
+
+Generated routing should look like:
+
+```typescript
+export const routes: Routes = [
+  {
+    path: '',
+    component: <FeatureContainer>Component,
+    data: { title: '<title from plan>' },
+    // store: '<featureCamel>',  // only when project convention >50% uses it
+  },
+];
+```
+
+Surface the decision to the user in the final report:
+
+```
+data.store: omitted (oh-admin convention — 0/128 routing modules use it)
+```
+
+OR
+
+```
+data.store: included as 'bookingCancel' (oh-admin convention — 73/128 routing modules use it)
+```
 
 ### i18n-keys.md (if i18nFlow !== 'none')
 

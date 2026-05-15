@@ -201,58 +201,126 @@ function suggestClosestMethod(needle, candidates) {
 
 function ruleStyleExtensionMatch() {
   // Container component should use the project's style extension.
-  // We sniff the catalog: count .scss vs .css in shared components.
-  // If majority is .scss, complain about styleUrls: ['./*.css'].
+  // v0.4.0: containers and sub-components have different defaults in oh-admin
+  // (containers use .css, sub-components in components/ use .scss). We pick
+  // the expected ext per `kind`.
   if (KIND !== 'container-ts' && KIND !== 'component-ts') return;
-  const projectExt = detectProjectStyleExt();
-  if (!projectExt) return;
+  const expectedExt = detectExpectedStyleExt(KIND);
+  if (!expectedExt) return;
   const m = content.match(/styleUrls\s*:\s*\[\s*['"]\.\/([^'"]+)\.(css|scss|sass)['"]/);
   if (!m) return;
   const usedExt = m[2];
-  if (usedExt !== projectExt) {
+  if (usedExt !== expectedExt) {
     const lineNum = content.slice(0, m.index).split('\n').length;
     violate(
       'error',
       'styleExtensionMatch',
       `line ${lineNum}`,
-      `Component uses ${usedExt} but project convention is ${projectExt}.`,
-      `Rename the style file to ${m[1]}.${projectExt} and update styleUrls accordingly.`,
+      `${KIND === 'container-ts' ? 'Container' : 'Sub-component'} uses .${usedExt} but project convention is .${expectedExt}.`,
+      `Rename the style file to ${m[1]}.${expectedExt} and update styleUrls accordingly.`,
     );
   }
 }
 
-function detectProjectStyleExt() {
-  // Heuristic: walk a few catalog.shared entries' componentPath, check sibling style files
-  if (!catalog.shared) return null;
+function detectExpectedStyleExt(kind) {
+  // v0.4.0: separate detection per kind. Containers and sub-components may
+  // differ — e.g. in oh-admin, containers use .css and components/ use .scss.
+  // We sample reference-features' container vs component files.
+  if (!reference || !reference.features) return detectProjectStyleExt(); // fallback to global
+
   let scss = 0, css = 0;
-  for (const e of catalog.shared.slice(0, 10)) {
-    if (!e.componentPath) continue;
-    const dir = path.dirname(path.join(catalog.projectRoot, e.componentPath));
-    try {
-      const files = fs.readdirSync(dir);
-      for (const f of files) {
-        if (f.endsWith('.scss')) scss++;
-        else if (f.endsWith('.css') && !f.endsWith('.spec.css')) css++;
+  const styleUrlRe = /styleUrls\s*:\s*\[\s*['"`]\.\/([^'"`]+)\.(css|scss|sass)['"`]/g;
+
+  for (const f of Object.values(reference.features)) {
+    if (kind === 'container-ts') {
+      // Sample container.ts source only
+      const src = f.container?.source;
+      if (!src) continue;
+      let m;
+      while ((m = styleUrlRe.exec(src)) !== null) {
+        if (m[2] === 'scss' || m[2] === 'sass') scss++;
+        else css++;
       }
-    } catch {}
-  }
-  // Also check reference-features anchor components — more representative of project default
-  if (reference && reference.features) {
-    for (const f of Object.values(reference.features)) {
-      const html = f.containerHtml?.path;
-      if (!html) continue;
-      const dir = path.dirname(path.join(reference.projectRoot, html));
+      styleUrlRe.lastIndex = 0;
+    } else if (kind === 'component-ts') {
+      // For components, we don't have direct snapshots in reference-features.
+      // Use a file-system walk on the feature's components/ directory.
+      if (!f.featureDir) continue;
+      const compsDir = path.join(reference.projectRoot, f.featureDir, 'components');
       try {
-        for (const file of fs.readdirSync(dir)) {
-          if (file.endsWith('.scss')) scss += 2;  // weight reference features higher
-          else if (file.endsWith('.css') && !file.includes('spec')) css += 2;
+        for (const sub of fs.readdirSync(compsDir, { withFileTypes: true })) {
+          if (!sub.isDirectory()) continue;
+          const subDir = path.join(compsDir, sub.name);
+          for (const file of fs.readdirSync(subDir)) {
+            if (file.endsWith('.component.ts')) {
+              try {
+                const cSrc = fs.readFileSync(path.join(subDir, file), 'utf8');
+                let m;
+                while ((m = styleUrlRe.exec(cSrc)) !== null) {
+                  if (m[2] === 'scss' || m[2] === 'sass') scss++;
+                  else css++;
+                }
+                styleUrlRe.lastIndex = 0;
+              } catch {}
+            }
+          }
         }
       } catch {}
     }
   }
+
+  if (scss + css < 2) return null;       // too few samples — don't enforce
   if (scss > css * 1.5) return 'scss';
   if (css > scss * 1.5) return 'css';
-  return null; // ambiguous — don't enforce
+  return null;
+}
+
+function detectProjectStyleExt() {
+  // v0.4.0 refined: parse component.ts files to read the actual styleUrls
+  // strings, NOT count side-by-side .scss/.css files (those exist due to
+  // component generator history regardless of which is referenced).
+  // Weight reference-features anchors 3x and catalog.shared 1x.
+  let scss = 0, css = 0;
+
+  const styleUrlRe = /styleUrls\s*:\s*\[\s*['"`]\.\/([^'"`]+)\.(css|scss|sass)['"`]/g;
+
+  // 1. Read component.ts files of catalog.shared entries
+  if (catalog.shared) {
+    for (const e of catalog.shared.slice(0, 20)) {
+      if (!e.componentPath) continue;
+      const tsAbs = path.join(catalog.projectRoot, e.componentPath);
+      try {
+        const src = fs.readFileSync(tsAbs, 'utf8');
+        let m;
+        while ((m = styleUrlRe.exec(src)) !== null) {
+          if (m[2] === 'scss' || m[2] === 'sass') scss += 1;
+          else css += 1;
+        }
+        styleUrlRe.lastIndex = 0;
+      } catch {}
+    }
+  }
+
+  // 2. Reference-features anchor components — much higher weight (3x)
+  if (reference && reference.features) {
+    for (const f of Object.values(reference.features)) {
+      const containerTs = f.container?.source;
+      if (containerTs) {
+        let m;
+        while ((m = styleUrlRe.exec(containerTs)) !== null) {
+          if (m[2] === 'scss' || m[2] === 'sass') scss += 3;
+          else css += 3;
+        }
+        styleUrlRe.lastIndex = 0;
+      }
+    }
+  }
+
+  // 3. Decision — require a clearer signal than v0.3.0's 1.5x
+  if (scss + css < 3) return null;        // too few samples
+  if (scss > css * 1.5) return 'scss';
+  if (css > scss * 1.5) return 'css';
+  return null;                             // ambiguous
 }
 
 function ruleSelectorNaming() {
@@ -441,8 +509,27 @@ function ruleSharedModuleImport() {
   }
 }
 
+function ruleEnvironmentTypeCast() {
+  // v0.4.0: code-generator should never emit `(environment as any).mockMode`
+  // because aad-mock Step 9 ensures mockMode exists on every env file.
+  if (KIND !== 'module' && KIND !== 'effects' && KIND !== 'service') return;
+  const re = /\(\s*environment\s+as\s+any\s*\)\s*\.\s*mockMode/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    const lineNum = content.slice(0, m.index).split('\n').length;
+    violate(
+      'warn',
+      'environmentTypeCast',
+      `line ${lineNum}`,
+      `Type-cast '(environment as any).mockMode' is unnecessary — aad-mock Step 9 ensures mockMode is declared on every env file.`,
+      `Replace with: environment.mockMode (no cast).`,
+    );
+  }
+}
+
 // ─── Run rules per kind ─────────────────────────────────────────────────
 ruleImportExists();
+ruleEnvironmentTypeCast();
 ruleCoreServiceMethodExists();
 ruleStyleExtensionMatch();
 ruleSelectorNaming();

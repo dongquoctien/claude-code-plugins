@@ -98,6 +98,7 @@ Write `{projectRoot}/.claude/angular-admin-design.json` conforming to `schemas/c
   "workingLanguage": "<en|ko|vi>",
   "projectRoot": "<absolute-path>",
   "outputDir": "docs/aad",
+  "stateDir": ".claude/aad",
   "profile": {
     "name": "<from detection>",
     "ngrxLayout": "<from detection>",
@@ -128,6 +129,24 @@ Write `{projectRoot}/.claude/angular-admin-design.json` conforming to `schemas/c
 ```
 
 **Do NOT** include fields whose value would be null/empty — omit them.
+
+## Step 7.5 — Suggest .gitignore entry (v0.4.0)
+
+After writing config, check if `{projectRoot}/.gitignore` exists. If yes, grep for `.claude/aad`. If absent, suggest adding:
+
+```
+# angular-admin-design plugin state (auto-managed)
+.claude/aad/
+```
+
+Use `AskUserQuestion`:
+
+> "Add '.claude/aad/' to .gitignore? (Plugin state files — .timeline.json, STATUS.md — should not be committed.)"
+> Options:
+> - "Yes, add" (Recommended)
+> - "Skip — I'll handle gitignore myself"
+
+If yes, append the lines to `.gitignore`. If no `.gitignore` exists, suggest creating one with that single line.
 
 ## Step 8 — Confirm
 

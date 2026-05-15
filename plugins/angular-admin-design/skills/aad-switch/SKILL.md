@@ -30,7 +30,7 @@ Validation:
 - If neither, ask `AskUserQuestion` "Switch to mock (--on) or real (--off)?".
 - If `--env prod` specified without `--force`, refuse with the same protection message the script gives.
 
-Compute `featureDir = {projectRoot}/{outputDir}/{feature}` — needed only for timeline logging.
+Compute `stateDir = {projectRoot}/{config.stateDir || outputDir}/{feature}` — needed only for timeline logging (v0.4.0).
 
 ## Step 3 — Resolve target env files
 
@@ -95,7 +95,7 @@ If the script returns `error`, stop and surface — do not continue with remaini
 
 ```bash
 node {pluginRoot}/scripts/timeline.mjs append \
-  --feature-dir "{featureDir}" \
+  --feature-dir "{stateDir}" \
   --kind {switch-on if --on, switch-off if --off} \
   --summary "Switched {feature}: env.{envList} mockMode → {true|false}" \
   --data '{"target":"{mock|real}","envFiles":[<list>],"changed":<list of files actually changed>}'

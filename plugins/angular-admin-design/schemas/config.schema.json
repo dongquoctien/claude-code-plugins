@@ -19,8 +19,13 @@
     },
     "outputDir": {
       "type": "string",
-      "description": "Where AAD writes per-feature artifacts (plan / reuse-map / timeline) relative to projectRoot.",
+      "description": "Where AAD writes per-feature plan artifacts (plan.md, plan.json, reuse-map.md, reuse-map.json, mock-spec.json, i18n-keys.md) — committed to git.",
       "default": "docs/aad"
+    },
+    "stateDir": {
+      "type": "string",
+      "description": "(v0.4.0) Where AAD writes per-feature state (.timeline.json, STATUS.md) — gitignored. Default '.claude/aad'. Falls back to outputDir for backward compat with v0.3.x configs.",
+      "default": ".claude/aad"
     },
     "profile": {
       "type": "object",

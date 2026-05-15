@@ -144,6 +144,89 @@ For each synthetic endpoint:
 - For Blob endpoints (Excel export), return a tiny stub `Blob`, not from disk.
 - For endpoints with **query-dependent semantics** (autocomplete, search), the mock still returns the whole fixture — annotate with `// MOCK: returns full fixture regardless of <param>` so dev knows.
 
+### v0.4.0 — `_filterAndPage` helper for paged list endpoints
+
+For endpoints where the response shape includes `{ list, totalCount }` (paged grids), emit a private `_filterAndPage` helper that does client-side filter + sort + pagination based on the `condition`. Without this, every page request returns the same fixture data and the UI looks broken.
+
+```typescript
+private _filterAndPage(
+  list: any[],
+  condition: any,
+): { dataList: any[]; totalCount: number } {
+  // MOCK-ONLY: client-side filter; backend does this server-side.
+  let filtered = list || [];
+
+  // Filter by condition fields (skip pagination + sort fields)
+  const filterKeys = Object.keys(condition || {}).filter(
+    (k) => !['page', 'pageSize', 'skip', 'take', 'sortField', 'sortDir', 'sortInfo', 'pageInfo'].includes(k),
+  );
+  for (const key of filterKeys) {
+    const val = condition[key];
+    if (val == null || val === '' || (Array.isArray(val) && val.length === 0)) continue;
+    if (Array.isArray(val)) {
+      filtered = filtered.filter((row) => val.includes(row[key]));
+    } else if (typeof val === 'string') {
+      const needle = val.toLowerCase();
+      filtered = filtered.filter((row) => String(row[key] || '').toLowerCase().includes(needle));
+    } else {
+      filtered = filtered.filter((row) => row[key] === val);
+    }
+  }
+
+  // Sort
+  const sortField = condition?.sortField;
+  const sortDir = condition?.sortDir;
+  if (sortField) {
+    filtered = [...filtered].sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (av < bv) return sortDir === 'desc' ? 1 : -1;
+      if (av > bv) return sortDir === 'desc' ? -1 : 1;
+      return 0;
+    });
+  }
+
+  const totalCount = filtered.length;
+
+  // Page (support both 0/1-based via skip/take OR page/pageSize)
+  const skip = condition?.skip ?? (condition?.page ? (condition.page - 1) * (condition.pageSize || 20) : 0);
+  const take = condition?.take ?? condition?.pageSize ?? 20;
+  const dataList = filtered.slice(skip, skip + take);
+
+  return { dataList, totalCount };
+}
+```
+
+Apply to list endpoints — replace the simple `map(res => ...)` with a chain that pipes through `_filterAndPage`:
+
+```typescript
+getHardblockHistory(
+  condition: IHardblockHistorySearchCondition,
+): Observable<{ dataList: IHardblockHistoryItem[]; totalCount: number }> {
+  // MOCK-ONLY: returns client-side-filtered+paginated subset of the fixture.
+  return this.http
+    .get<WrappedListResponse<IHardblockHistoryItem>>(
+      `${MockService.fixturesRoot}/get-hardblock-history.json`,
+    )
+    .pipe(
+      delay(200),
+      switchMap((res) => {
+        if (res && res.succeedYn) {
+          const fullList = (res.result?.list) || res.list || [];
+          return of(this._filterAndPage(this._addRowid(fullList), condition));
+        }
+        return throwError(res || 'mock response error');
+      }),
+    );
+}
+```
+
+**Don't** apply `_filterAndPage` to:
+- Autocomplete (response is itself filtered by keyword on the server — the mock just returns all suggestions)
+- Lookup/code-list endpoints (no pagination)
+- Detail/get-by-id endpoints (return single record)
+- Blob endpoints
+
 ## Step 6 — Update effects to inject via token
 
 Edit `<featureRoot>/effects/<feature>.effects.ts`:

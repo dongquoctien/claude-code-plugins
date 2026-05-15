@@ -141,6 +141,10 @@ import { environment } from 'src/environments/environment';
 })
 ```
 
+**Type-safety note (v0.4.0):** Use `environment.mockMode` directly — NOT `(environment as any).mockMode`. The `aad-mock` skill's Step 9 ensures **every** `src/environments/environment.*.ts` file declares the `mockMode` property (even if just `mockMode: false`), so TypeScript structural typing sees it on every build configuration.
+
+If you find yourself wanting to cast `(environment as any)`, that's a signal `aad-mock` Step 9 didn't run on all env files. Re-run `/aad-mock <feature>` first.
+
 ### Effects rewiring
 
 Effects must inject the **token**, not the concrete class:
